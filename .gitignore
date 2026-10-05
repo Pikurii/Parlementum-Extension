@@ -6,6 +6,7 @@ tampermonkey-parlementum/
 
 # Temporary & Build Archives
 *.zip
+!parlementum-auto-worker-*.zip
 
 # Logs
 *.log
