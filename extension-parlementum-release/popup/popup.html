@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Parlamentum Auto Worker</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+    body {
+      width: 330px;
+      background: radial-gradient(ellipse 90% 50% at 50% -10%, rgba(0, 217, 255, 0.08), transparent 70%), #090c15;
+      color: #f1f5f9;
+      padding: 0;
+      user-select: none;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .header {
+      background: linear-gradient(135deg, rgba(22, 28, 48, 0.98) 0%, rgba(13, 17, 28, 0.98) 100%);
+      padding: 13px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      position: relative;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .brand img {
+      width: 30px;
+      height: 30px;
+      border-radius: 9px;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      box-shadow: 0 0 12px rgba(0, 255, 136, 0.25);
+    }
+    .brand-title {
+      font-size: 13.5px;
+      font-weight: 700;
+      color: #ffffff;
+      letter-spacing: -0.2px;
+      line-height: 1.2;
+    }
+    .brand-ver {
+      font-size: 10px;
+      color: #00ff88;
+      font-weight: 600;
+      letter-spacing: 0.1px;
+    }
+    .status-badge {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.6px;
+      text-transform: uppercase;
+      background: rgba(0, 255, 136, 0.12);
+      color: #00ff88;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      box-shadow: 0 0 10px rgba(0, 255, 136, 0.2);
+      transition: all 0.2s ease;
+    }
+    .status-badge.paused {
+      background: rgba(255, 71, 87, 0.12);
+      color: #ff4757;
+      border-color: rgba(255, 71, 87, 0.3);
+      box-shadow: 0 0 10px rgba(255, 71, 87, 0.2);
+    }
+    .dot {
+      width: 6.5px;
+      height: 6.5px;
+      border-radius: 50%;
+      background: #00ff88;
+      box-shadow: 0 0 7px #00ff88;
+      animation: aw-dot-pulse 1.8s infinite ease-in-out;
+    }
+    .status-badge.paused .dot {
+      background: #ff4757;
+      box-shadow: 0 0 7px #ff4757;
+      animation: none;
+    }
+    @keyframes aw-dot-pulse {
+      0%, 100% { transform: scale(1); opacity: 1; }
+      50% { transform: scale(1.25); opacity: 0.7; }
+    }
+
+    /* Main Container */
+    .main {
+      padding: 13px 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    /* Region Row */
+    #popup-region-row {
+      display: none;
+      justify-content: space-between;
+      align-items: center;
+      background: linear-gradient(135deg, rgba(0, 217, 255, 0.08) 0%, rgba(0, 255, 136, 0.04) 100%);
+      border: 1px solid rgba(0, 217, 255, 0.2);
+      border-radius: 8px;
+      padding: 6px 10px;
+      font-size: 11px;
+    }
+    #popup-region-buff {
+      background: rgba(0, 255, 136, 0.14);
+      color: #00ff88;
+      padding: 1px 7px;
+      border-radius: 4px;
+      font-weight: 700;
+      font-size: 9.5px;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+      white-space: nowrap;
+    }
+
+    /* Energy Card */
+    .card {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 11px;
+      padding: 11px 13px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+    }
+    .energy-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 7px;
+    }
+    .energy-title {
+      font-size: 10px;
+      color: #94a3b8;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.7px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .energy-val {
+      font-size: 17px;
+      font-weight: 800;
+      color: #00ff88;
+      text-shadow: 0 0 12px rgba(0, 255, 136, 0.35);
+      letter-spacing: 0.3px;
+    }
+    .energy-target {
+      font-size: 10px;
+      color: #ffb547;
+      font-weight: 700;
+      background: rgba(255, 181, 71, 0.1);
+      border: 1px solid rgba(255, 181, 71, 0.25);
+      padding: 2px 6px;
+      border-radius: 5px;
+      margin-left: 6px;
+    }
+    .bar-bg {
+      height: 8px;
+      background: rgba(0, 0, 0, 0.55);
+      border-radius: 999px;
+      overflow: hidden;
+      margin-bottom: 8px;
+      border: 1px solid rgba(255, 255, 255, 0.07);
+      padding: 1px;
+    }
+    .bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #00d9ff 0%, #00ff88 100%);
+      border-radius: 999px;
+      transition: width 0.3s ease;
+      box-shadow: 0 0 10px rgba(0, 255, 136, 0.45);
+    }
+    .countdown-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 11px;
+      color: #94a3b8;
+    }
+    .countdown-val {
+      color: #00d9ff;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+      background: rgba(0, 217, 255, 0.08);
+      border: 1px solid rgba(0, 217, 255, 0.2);
+      border-radius: 6px;
+      padding: 2px 7px;
+      font-size: 11px;
+    }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 7px;
+    }
+    .stat-item {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 9px;
+      padding: 8px 10px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .stat-item:hover {
+      background: rgba(255, 255, 255, 0.045);
+      border-color: rgba(255, 255, 255, 0.12);
+      transform: translateY(-1px);
+    }
+    .stat-label {
+      font-size: 9.5px;
+      color: #727588;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 3px;
+    }
+    .stat-val {
+      font-size: 14px;
+      font-weight: 800;
+      color: #f1f5f9;
+      letter-spacing: 0.2px;
+    }
+    .stat-val.xp {
+      color: #00ff88;
+      text-shadow: 0 0 8px rgba(0, 255, 136, 0.25);
+    }
+    .stat-val.token-ok {
+      color: #00ff88;
+      text-shadow: 0 0 8px rgba(0, 255, 136, 0.3);
+    }
+    .stat-val.token-bad {
+      color: #ff5555;
+      text-shadow: 0 0 8px rgba(255, 85, 85, 0.3);
+    }
+
+    /* Last Log Box */
+    .log-box-card {
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 9px;
+      padding: 8px 11px;
+      cursor: pointer;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .log-box-card:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(0, 255, 136, 0.28);
+      transform: translateY(-1px);
+    }
+    .btn-log-link {
+      background: rgba(0, 255, 136, 0.12);
+      border: 1px solid rgba(0, 255, 136, 0.28);
+      color: #00ff88;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 7px;
+      border-radius: 5px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      transition: all 0.15s ease;
+    }
+    .btn-log-link:hover {
+      background: rgba(0, 255, 136, 0.22);
+      transform: scale(1.03);
+    }
+    .log-preview-text {
+      color: #cbd5e1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      font-size: 10px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      background: rgba(0, 0, 0, 0.3);
+      padding: 4px 7px;
+      border-radius: 5px;
+      border: 1px solid rgba(255, 255, 255, 0.04);
+      margin-top: 4px;
+    }
+
+    /* Actions */
+    .actions {
+      display: flex;
+      flex-direction: column;
+      gap: 7px;
+    }
+    .btn {
+      width: 100%;
+      padding: 9.5px 12px;
+      border-radius: 8px;
+      border: none;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+      user-select: none;
+    }
+    .btn:hover {
+      filter: brightness(1.12);
+      transform: translateY(-1px);
+    }
+    .btn:active {
+      transform: translateY(0.5px) scale(0.98);
+      filter: brightness(0.95);
+    }
+    .btn-toggle-pause {
+      background: linear-gradient(135deg, #ef4444 0%, #b91c1c 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(239, 68, 68, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .btn-toggle-resume {
+      background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .btn-work-now {
+      background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
+      color: #fff;
+      box-shadow: 0 4px 14px rgba(2, 132, 199, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+    }
+    .btn-dashboard {
+      background: rgba(255, 255, 255, 0.05);
+      color: #e2e8f0;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    }
+    .btn-dashboard:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+      color: #ffffff;
+    }
+
+    /* Footer */
+    .footer {
+      padding: 9px 15px;
+      background: rgba(10, 12, 22, 0.95);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      font-size: 10px;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .footer-tab-status {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .footer-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #55576a;
+    }
+    .footer-dot.online {
+      background: #00ff88;
+      box-shadow: 0 0 6px #00ff88;
+    }
+    .shortcut-badge {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 4px;
+      padding: 2px 6px;
+      font-size: 9px;
+      color: #94a3b8;
+      font-family: monospace;
+    }
+
+    /* Activity Log Modal */
+    .modal-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(6, 8, 16, 0.98);
+      z-index: 999;
+      display: flex;
+      flex-direction: column;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      animation: aw-fadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    @keyframes aw-fadeIn {
+      from { opacity: 0; transform: scale(0.98); }
+      to { opacity: 1; transform: scale(1); }
+    }
+    .modal-box {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+      width: 100%;
+    }
+    .modal-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 14px;
+      background: linear-gradient(135deg, rgba(22, 28, 48, 0.98) 0%, rgba(13, 17, 28, 0.98) 100%);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .modal-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .log-count-pill {
+      background: rgba(0, 255, 136, 0.15);
+      color: #00ff88;
+      font-size: 10px;
+      font-weight: 700;
+      padding: 1px 7px;
+      border-radius: 999px;
+      border: 1px solid rgba(0, 255, 136, 0.3);
+    }
+    .modal-close {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #cbd5e1;
+      border-radius: 6px;
+      width: 24px;
+      height: 24px;
+      font-size: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s ease;
+    }
+    .modal-close:hover {
+      background: rgba(255, 68, 68, 0.25);
+      border-color: #ff4444;
+      color: #fff;
+    }
+    .modal-toolbar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 12px;
+      background: rgba(0, 0, 0, 0.35);
+      border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    }
+    .log-select {
+      background: #141829;
+      color: #e0e0f0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 4px 7px;
+      outline: none;
+      cursor: pointer;
+    }
+    .log-search {
+      flex: 1;
+      background: #141829;
+      color: #e0e0f0;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 4px 9px;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .log-search:focus {
+      border-color: #00ff88;
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.2);
+    }
+    .btn-clear {
+      background: rgba(255, 68, 68, 0.12);
+      border: 1px solid rgba(255, 68, 68, 0.25);
+      color: #ff6b6b;
+      border-radius: 6px;
+      font-size: 11px;
+      padding: 4px 8px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-clear:hover {
+      background: rgba(255, 68, 68, 0.25);
+      border-color: rgba(255, 68, 68, 0.5);
+    }
+    .log-entries {
+      flex: 1;
+      overflow-y: auto;
+      padding: 8px 10px;
+      font-family: 'Consolas', 'Courier New', monospace;
+      font-size: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+      max-height: 380px;
+    }
+    .log-entries::-webkit-scrollbar {
+      width: 4px;
+    }
+    .log-entries::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.15);
+      border-radius: 2px;
+    }
+    .log-row {
+      padding: 5px 8px;
+      border-radius: 5px;
+      background: rgba(255, 255, 255, 0.025);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      line-height: 1.4;
+      word-break: break-word;
+    }
+    .log-row.success {
+      color: #00ff88;
+      border-left: 3px solid #00ff88;
+    }
+    .log-row.warn {
+      color: #ffd166;
+      border-left: 3px solid #ffd166;
+    }
+    .log-row.error {
+      color: #ff6b6b;
+      border-left: 3px solid #ff6b6b;
+    }
+    .log-row.info {
+      color: #80d4ff;
+      border-left: 3px solid #80d4ff;
+    }
+    .log-time {
+      color: #70758a;
+      margin-right: 5px;
+      font-weight: 600;
+    }
+    .log-empty {
+      text-align: center;
+      color: #64748b;
+      padding: 35px 10px;
+      font-size: 11px;
+    }
+  </style>
+</head>
+<body>
+  <!-- Header -->
+  <div class="header">
+    <div class="brand">
+      <img src="../icons/icon48.png" alt="logo">
+      <div>
+        <div class="brand-title">Auto Worker</div>
+        <div class="brand-ver">v5.11.0 • Interceptor</div>
+      </div>
+    </div>
+    <div id="popup-status-badge" class="status-badge">
+      <div class="dot"></div>
+      <span id="popup-status-text">RUNNING</span>
+    </div>
+  </div>
+
+  <!-- Main Body -->
+  <div class="main">
+    <!-- Region & Buff Banner -->
+    <div id="popup-region-row">
+      <span style="color:#e2e8f0;font-weight:600;display:flex;align-items:center;gap:4px;">
+        <span>📍</span> <span id="popup-region-text">Memuat wilayah...</span>
+      </span>
+      <span id="popup-region-buff">Buff Aktif</span>
+    </div>
+
+    <!-- Live Energy Card -->
+    <div class="card">
+      <div class="energy-header">
+        <span class="energy-title">⚡ Energi Saat Ini</span>
+        <div style="display:flex;align-items:center;">
+          <span id="popup-energy-val" class="energy-val">0/110</span>
+          <span id="popup-energy-target" class="energy-target">Target 10⚡</span>
+        </div>
+      </div>
+      <div class="bar-bg">
+        <div id="popup-bar-fill" class="bar-fill"></div>
+      </div>
+      <div class="countdown-row">
+        <span>Jadwal kerja berikutnya:</span>
+        <span id="popup-next-work" class="countdown-val">Menghitung...</span>
+      </div>
+    </div>
+
+    <!-- Quick Stats Grid -->
+    <div class="stats-grid">
+      <div class="stat-item">
+        <div class="stat-label">Shift Hari Ini</div>
+        <div id="popup-work-today" class="stat-val">0x</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">XP Hari Ini</div>
+        <div id="popup-xp-today" class="stat-val xp">+0 XP</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Token Auth</div>
+        <div id="popup-token-status" class="stat-val token-ok">VALID</div>
+      </div>
+      <div class="stat-item">
+        <div class="stat-label">Shift Terakhir</div>
+        <div id="popup-last-work" class="stat-val">--:--</div>
+      </div>
+    </div>
+
+    <!-- Last Activity Log Card -->
+    <div id="popup-last-log-box" class="log-box-card" title="Klik untuk membuka riwayat log lengkap">
+      <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 2px;">
+        <span style="color: #727588; font-size: 9.5px; text-transform: uppercase; font-weight: 700; letter-spacing: 0.5px;">Log Terakhir:</span>
+        <button id="btn-open-log-modal" class="btn-log-link" type="button">📋 Buka Log</button>
+      </div>
+      <div id="popup-last-log" class="log-preview-text">Menunggu aktivitas...</div>
+    </div>
+
+    <!-- Action Buttons -->
+    <div class="actions">
+      <button id="btn-popup-toggle" class="btn btn-toggle-pause">
+        <span id="btn-toggle-text">⏸ Jeda Auto Worker</span>
+      </button>
+      <button id="btn-popup-work" class="btn btn-work-now">
+        ⚡ Kerja Sekarang (Manual)
+      </button>
+      <button id="btn-popup-open" class="btn btn-dashboard">
+        🌐 Buka Tab Parlamentum
+      </button>
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-tab-status">
+      <div id="popup-tab-dot" class="footer-dot"></div>
+      <span id="popup-tab-text">Memeriksa tab game...</span>
+    </div>
+    <span class="shortcut-badge">Ctrl+Shift+A</span>
+  </div>
+
+  <!-- Activity Log Modal Overlay -->
+  <div id="popup-log-modal" class="modal-overlay" style="display: none;">
+    <div class="modal-box">
+      <div class="modal-top">
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span style="font-size: 14px;">📋</span>
+          <span class="modal-title">Activity Log</span>
+          <span id="popup-log-count" class="log-count-pill">0</span>
+        </div>
+        <button id="btn-close-log-modal" class="modal-close" title="Tutup Log">✕</button>
+      </div>
+
+      <div class="modal-toolbar">
+        <select id="popup-log-filter-type" class="log-select">
+          <option value="all">Semua</option>
+          <option value="success">✅ Sukses</option>
+          <option value="warn">⚠️ Peringatan</option>
+          <option value="error">❌ Error</option>
+          <option value="info">ℹ️ Info</option>
+        </select>
+        <input id="popup-log-filter-text" type="text" placeholder="Cari log..." class="log-search">
+        <button id="btn-clear-popup-logs" class="btn-clear" title="Bersihkan log">🗑️</button>
+      </div>
+
+      <div id="popup-log-entries" class="log-entries">
+        <div class="log-empty">Belum ada riwayat aktivitas.</div>
+      </div>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

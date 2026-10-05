@@ -1,0 +1,52 @@
+{
+  "manifest_version": 3,
+  "name": "Parlamentum Auto Worker",
+  "version": "5.11.0",
+  "description": "Smart auto worker, analytics, and efficiency dashboard for Parlamentum.org",
+  "permissions": [
+    "storage",
+    "notifications",
+    "alarms",
+    "tabs",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://parlamentum.org/*"
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png"
+    },
+    "default_title": "Parlamentum Auto Worker"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://parlamentum.org/*"],
+      "js": ["interceptor.js"],
+      "world": "MAIN",
+      "run_at": "document_start"
+    },
+    {
+      "matches": ["https://parlamentum.org/*"],
+      "js": ["dist/content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/*", "dist/*", "interceptor.js"],
+      "matches": ["https://parlamentum.org/*"]
+    }
+  ]
+}
+
