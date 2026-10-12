@@ -54,13 +54,20 @@
 
         try {
             // 1. Work endpoint response
-            if (url.includes('/api/player/work') || url.includes('/player/work')) {
+            if (url.includes('/api/player/work') || url.includes('/player/work') || url.includes('/api/work') || url.includes('/api/player/shift') || url.includes('/api/shift')) {
                 if (status >= 200 && status < 300) {
+                    const energyUsed = Number(data.energyUsed) || 0;
+                    const calculatedXp = energyUsed >= 10 ? Math.floor(energyUsed / 10) * 4 : (energyUsed > 0 ? 4 : 0);
+                    const xpEarned = Number(data.xpEarned) > 0 ? Number(data.xpEarned) : calculatedXp;
                     sendToExtension('WORK_SUCCESS', {
                         url,
                         status,
-                        energyUsed: Number(data.energyUsed) || 0,
-                        xpEarned: Number(data.xpEarned) || 0,
+                        energyUsed,
+                        xpEarned,
+                        produced: Number(data.produced) || 0,
+                        workerUnits: Number(data.workerUnits) || 0,
+                        wageNet: data.wageNet || '0',
+                        leveledUp: Boolean(data.leveledUp),
                         remainingEnergy: data.energy != null ? Number(data.energy) : null,
                         raw: data
                     });

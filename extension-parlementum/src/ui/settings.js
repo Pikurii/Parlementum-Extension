@@ -8,6 +8,7 @@
 import { getValue, setValue } from '../storage.js';
 import { normalizeConfig, saveConfig } from '../config.js';
 import { getSavedCredentials, saveCredentials, clearCredentials } from '../autologin.js';
+import { ICONS } from './icons.js';
 
 // Inject modern settings stylesheet once
 function ensureSettingsStyles() {
@@ -284,7 +285,7 @@ export function createSettingsModal(CONFIG, ctx) {
                         background: #252c40; color: #fff; border: 1px solid #3b4563;
                         padding: 6px 10px; border-radius: 6px; cursor: pointer;
                         font-size: 11px; min-width: 76px; font-weight: 500; transition: background 0.15s;
-                    ">🎯 Record</button>
+                    ">Rekam</button>
                     <input type="text" id="shortcut-${action.id}" value="${shortcut.display}"
                         readonly
                         style="width: 110px; background: #121624; color: #00d4ff; border: 1px solid #28334e; border-radius: 6px; padding: 6px 8px; font-size: 11px; font-weight: 700; text-align: center;">
@@ -321,10 +322,10 @@ export function createSettingsModal(CONFIG, ctx) {
                         background: linear-gradient(135deg, rgba(0,255,136,0.2), rgba(0,180,216,0.2));
                         border: 1px solid rgba(0,255,136,0.3);
                         display: flex; align-items: center; justify-content: center;
-                        font-size: 16px;
-                    ">⚙️</div>
+                        color: #00ff88;
+                    ">${ICONS.settings}</div>
                     <div>
-                        <div style="font-weight: 700; color: #fff; font-size: 15px; letter-spacing: 0.3px;">Pengaturan Bot</div>
+                        <div style="font-weight: 700; color: #fff; font-size: 14.5px; letter-spacing: 0.3px;">Pengaturan Bot</div>
                         <div style="font-size: 11px; color: #8b9bb4;">Sesuaikan jadwal, threshold, notifikasi & keamanan</div>
                     </div>
                 </div>
@@ -332,16 +333,16 @@ export function createSettingsModal(CONFIG, ctx) {
                     background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12);
                     padding: 6px 12px; border-radius: 8px; cursor: pointer;
                     font-size: 12px; font-weight: 600; transition: all 0.15s;
-                ">✕ Tutup</button>
+                ">Tutup</button>
             </div>
 
             <!-- Segmented Category Tabs -->
             <div class="aw-tab-nav">
-                <button class="aw-tab-btn active" data-tab="tab-work">⚡ Kerja & Energi</button>
-                <button class="aw-tab-btn" data-tab="tab-stealth">🛡️ Stealth & Jadwal</button>
-                <button class="aw-tab-btn" data-tab="tab-notif">🔔 Notifikasi & Suara</button>
-                <button class="aw-tab-btn" data-tab="tab-ui">🖥️ Tampilan & Tombol</button>
-                <button class="aw-tab-btn" data-tab="tab-account">🔐 Akun & Sistem</button>
+                <button class="aw-tab-btn active" data-tab="tab-work">${ICONS.zap} Kerja & Energi</button>
+                <button class="aw-tab-btn" data-tab="tab-stealth">${ICONS.shield} Stealth & Jadwal</button>
+                <button class="aw-tab-btn" data-tab="tab-notif">${ICONS.bell} Notifikasi & Suara</button>
+                <button class="aw-tab-btn" data-tab="tab-ui">${ICONS.monitor} Tampilan & Pintasan</button>
+                <button class="aw-tab-btn" data-tab="tab-account">${ICONS.key} Akun & Sistem</button>
             </div>
 
             <!-- Scrollable Content Body -->
@@ -355,10 +356,10 @@ export function createSettingsModal(CONFIG, ctx) {
                 <div id="tab-work" class="aw-tab-pane active">
                     <div class="aw-card">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <div class="aw-card-title">⚡ Batas Energi Sebelum Kerja</div>
+                            <div class="aw-card-title">Batas Energi Sebelum Kerja</div>
                             <div style="display: flex; align-items: center; gap: 4px;">
                                 <input type="number" id="setting-energy-threshold-num" min="10" max="100" step="5" value="${CONFIG.energyThreshold}" class="aw-num-badge">
-                                <span style="color: #00ff88; font-size: 13px; font-weight: 700;">⚡</span>
+                                <span style="color: #00ff88; font-size: 11px; font-weight: 700;">EN</span>
                             </div>
                         </div>
                         <div class="aw-card-desc" style="margin-bottom: 12px;">
@@ -370,18 +371,18 @@ export function createSettingsModal(CONFIG, ctx) {
                         <!-- Quick Presets -->
                         <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
                             <span style="font-size: 11px; color: #64748b; margin-right: 4px;">Pilihan Cepat:</span>
-                            <button type="button" class="aw-preset-btn" data-val="10">10⚡ Cepat</button>
-                            <button type="button" class="aw-preset-btn" data-val="25">25⚡ Sedang</button>
-                            <button type="button" class="aw-preset-btn" data-val="50">50⚡ Hemat</button>
-                            <button type="button" class="aw-preset-btn" data-val="80">80⚡ Santai</button>
-                            <button type="button" class="aw-preset-btn" data-val="100">100⚡ Penuh</button>
+                            <button type="button" class="aw-preset-btn" data-val="10">10 EN</button>
+                            <button type="button" class="aw-preset-btn" data-val="25">25 EN</button>
+                            <button type="button" class="aw-preset-btn" data-val="50">50 EN</button>
+                            <button type="button" class="aw-preset-btn" data-val="80">80 EN</button>
+                            <button type="button" class="aw-preset-btn" data-val="100">100 EN</button>
                         </div>
                     </div>
 
                     <!-- Formula Sleep Info Card -->
                     <div style="background: rgba(0, 255, 136, 0.04); border: 1px solid rgba(0, 255, 136, 0.15); border-radius: 10px; padding: 14px; margin-top: 14px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                            <span style="color: #00ff88; font-size: 12px; font-weight: 600;">⚡ Rumus Timer Pemulihan</span>
+                            <span style="color: #00ff88; font-size: 12px; font-weight: 600;">Rumus Timer Pemulihan</span>
                             <span style="color: #94a3b8; font-size: 11px; font-family: monospace;">(Threshold - Sisa) × 60s + Jitter</span>
                         </div>
                         <div style="font-size: 11px; color: #94a3b8; line-height: 1.5;">
@@ -396,8 +397,8 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🎲 Humanizer Threshold Jitter</div>
-                                <div class="aw-card-desc">Mengacak sedikit ambang batas energi (±2⚡) di setiap siklus agar interval kerja tidak terbaca kaku dan terdeteksi bot oleh server.</div>
+                                <div class="aw-card-title">Threshold Jitter (Anti-Pola)</div>
+                                <div class="aw-card-desc">Mengacak sedikit ambang batas energi (±2 EN) di setiap siklus agar interval kerja tidak terbaca kaku dan terdeteksi bot oleh server.</div>
                             </div>
                             <label class="aw-switch">
                                 <input type="checkbox" id="setting-stealth-jitter" ${CONFIG.stealthJitterEnabled ? 'checked' : ''}>
@@ -409,7 +410,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 10px;">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🌙 Jam Istirahat / Tidur Malam</div>
+                                <div class="aw-card-title">Jadwal Istirahat Malam</div>
                                 <div class="aw-card-desc">Bot otomatis berhenti kerja pada rentang jam istirahat malam layaknya pola hidup manusia normal.</div>
                             </div>
                             <label class="aw-switch">
@@ -418,7 +419,7 @@ export function createSettingsModal(CONFIG, ctx) {
                             </label>
                         </div>
                         <div style="display: flex; gap: 8px; align-items: center; background: rgba(0,0,0,0.25); padding: 8px 12px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.04);">
-                            <span style="font-size: 12px; color: #94a3b8;">Jam Tidur:</span>
+                            <span style="font-size: 12px; color: #94a3b8;">Jam Istirahat:</span>
                             <select id="setting-sleep-start" class="aw-select-box">
                                 ${Array.from({length: 24}, (_, i) => `<option value="${i}" ${(CONFIG.sleepStartHour ?? 1) === i ? 'selected' : ''}>${String(i).padStart(2, '0')}:00</option>`).join('')}
                             </select>
@@ -433,7 +434,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🔇 Meredam Log Energi Rendah (Quiet Mode)</div>
+                                <div class="aw-card-title">Peredam Log Energi Rendah (Quiet Mode)</div>
                                 <div class="aw-card-desc">Membatasi log "Energi tidak cukup" maksimal 1x per 2 menit agar Activity Log tetap bersih dan mudah dibaca.</div>
                             </div>
                             <label class="aw-switch">
@@ -449,7 +450,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">📱 Notifikasi Pop-up Browser</div>
+                                <div class="aw-card-title">Notifikasi Pop-up Browser</div>
                                 <div class="aw-card-desc">Menampilkan banner notifikasi desktop browser ketika shift berhasil dikerjakan.</div>
                             </div>
                             <label class="aw-switch">
@@ -462,8 +463,8 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">⚡ Alert Desktop Saat Energi Penuh</div>
-                                <div class="aw-card-desc">Kirim notifikasi desktop segera setelah energi mencapai batas maksimal (100⚡) agar tidak mubazir.</div>
+                                <div class="aw-card-title">Alert Desktop Saat Energi Penuh</div>
+                                <div class="aw-card-desc">Kirim notifikasi desktop segera setelah energi mencapai batas maksimal agar tidak terbuang.</div>
                             </div>
                             <label class="aw-switch">
                                 <input type="checkbox" id="setting-energy-full-alert" ${CONFIG.energyFullAlertEnabled ? 'checked' : ''}>
@@ -475,8 +476,8 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 8px;">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🔔 Suara Notifikasi Kerja</div>
-                                <div class="aw-card-desc">Putar efek suara halus saat selesai bekerja atau terjadi kesalahan.</div>
+                                <div class="aw-card-title">Suara Notifikasi Kerja</div>
+                                <div class="aw-card-desc">Putar efek audio halus saat selesai bekerja atau terjadi kesalahan.</div>
                             </div>
                             <label class="aw-switch">
                                 <input type="checkbox" id="setting-sound-notification-enabled" ${CONFIG.soundNotificationEnabled ? 'checked' : ''}>
@@ -494,8 +495,8 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 8px;">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🚨 Bunyi Alarm Energi Penuh</div>
-                                <div class="aw-card-desc">Putar alarm khusus saat energi akun sudah menyentuh 100⚡.</div>
+                                <div class="aw-card-title">Alarm Suara Energi Penuh</div>
+                                <div class="aw-card-desc">Putar alarm khusus saat energi akun sudah menyentuh kapasitas maksimal.</div>
                             </div>
                             <label class="aw-switch">
                                 <input type="checkbox" id="setting-energy-full-sound-enabled" ${CONFIG.energyFullAlertSoundEnabled ? 'checked' : ''}>
@@ -515,7 +516,7 @@ export function createSettingsModal(CONFIG, ctx) {
                         padding: 9px 16px; border-radius: 8px; cursor: pointer;
                         font-size: 12px; width: 100%; font-weight: 600; margin-top: 4px;
                         transition: all 0.15s;
-                    ">🔊 Uji Coba Bunyi Suara (Test Sound)</button>
+                    ">Uji Coba Bunyi Suara (Test Sound)</button>
                 </div>
 
                 <!-- TAB 4: TAMPILAN & SHORTCUT -->
@@ -523,7 +524,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🏠 Hanya Tampilkan di Dashboard (/dashboard)</div>
+                                <div class="aw-card-title">Hanya Tampilkan di Dashboard (/dashboard)</div>
                                 <div class="aw-card-desc">Otomatis sembunyikan panel jika membuka halaman lain (misal: /map, /market). Bot tetap aktif di background.</div>
                             </div>
                             <label class="aw-switch">
@@ -536,7 +537,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">👑 Hanya Tampilkan di Tab Utama (Standby Hidden)</div>
+                                <div class="aw-card-title">Hanya Tampilkan di Tab Utama (Standby Hidden)</div>
                                 <div class="aw-card-desc">Jika membuka banyak tab game bersamaan, panel hanya melayang di tab utama yang memimpin kerja.</div>
                             </div>
                             <label class="aw-switch">
@@ -549,7 +550,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 8px;">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">📐 Sesuaikan dengan Ukuran Jendela Browser</div>
+                                <div class="aw-card-title">Sesuaikan dengan Ukuran Jendela Browser</div>
                                 <div class="aw-card-desc">Mencegah panel keluar layar saat ukuran browser diperkecil.</div>
                             </div>
                             <label class="aw-switch">
@@ -559,7 +560,7 @@ export function createSettingsModal(CONFIG, ctx) {
                         </div>
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">↩️ Kembali ke Posisi Awal Saat Browser Dibesarkan</div>
+                                <div class="aw-card-title">Kembali ke Posisi Semula Saat Browser Dibesarkan</div>
                                 <div class="aw-card-desc">Mengembalikan panel ke koordinat asal saat ruang layar kembali lega.</div>
                             </div>
                             <label class="aw-switch">
@@ -574,13 +575,13 @@ export function createSettingsModal(CONFIG, ctx) {
                         padding: 8px 16px; border-radius: 8px; cursor: pointer;
                         font-size: 12px; width: 100%; margin-bottom: 16px; font-weight: 500;
                         transition: all 0.15s;
-                    ">🔄 Atur Ulang Koordinat Posisi Panel ke Pojok Kanan</button>
+                    ">Atur Ulang Posisi Panel ke Pojok Kanan</button>
 
                     <!-- Keyboard Shortcuts Sub-Section -->
                     <div style="margin-top: 10px;">
-                        <div style="font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px;">⌨️ Pintasan Keyboard (Shortcuts)</div>
+                        <div style="font-size: 13px; font-weight: 600; color: #fff; margin-bottom: 4px;">Pintasan Keyboard (Shortcuts)</div>
                         <div style="font-size: 11px; color: #8b9bb4; margin-bottom: 10px;">
-                            Klik <b>Record</b> lalu tekan 1–3 kombinasi tombol. Tekan <kbd style="background:#222;padding:1px 4px;border-radius:3px;">Enter</kbd> untuk simpan, <kbd style="background:#222;padding:1px 4px;border-radius:3px;">Esc</kbd> untuk batalkan.
+                            Klik <b>Rekam</b> lalu tekan 1–3 kombinasi tombol. Tekan <kbd style="background:#222;padding:1px 4px;border-radius:3px;">Enter</kbd> untuk simpan, <kbd style="background:#222;padding:1px 4px;border-radius:3px;">Esc</kbd> untuk batalkan.
                         </div>
                         ${shortcutInputsHTML}
                         <div id="shortcut-error" style="color: #ff4444; font-size: 11px; margin-top: 8px; display: none;"></div>
@@ -592,7 +593,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🍃 Mode Eco (Hemat RAM & CPU)</div>
+                                <div class="aw-card-title">Mode Eco (Hemat RAM & CPU)</div>
                                 <div class="aw-card-desc">Menghentikan render visual DOM saat tab ditinggal di latar belakang dan men-cache pembacaan wilayah. Timer dan giliran kerja tetap berjalan 100% presisi tanpa tertunda.</div>
                             </div>
                             <label class="aw-switch">
@@ -605,7 +606,7 @@ export function createSettingsModal(CONFIG, ctx) {
                     <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 10px;">
                             <div class="aw-card-info">
-                                <div class="aw-card-title">🔐 Auto Re-Login (Masuk Otomatis)</div>
+                                <div class="aw-card-title">Masuk Otomatis (Auto Re-Login)</div>
                                 <div class="aw-card-desc">Jika sesi/token game habis (HTTP 401), bot akan otomatis login kembali ke akun Anda dan melanjutkan kerja. Data disimpan aman 100% lokal di browser.</div>
                             </div>
                             <label class="aw-switch">
@@ -622,20 +623,20 @@ export function createSettingsModal(CONFIG, ctx) {
                             <div style="margin-bottom: 12px;">
                                 <div style="display: flex; justify-content: space-between; margin-bottom: 4px;">
                                     <label style="font-size: 11px; color: #94a3b8; font-weight: 500;">Kata Sandi</label>
-                                    <span id="aw-toggle-pwd-vis" style="font-size: 11px; color: #00d4ff; cursor: pointer; user-select: none;">👁️ Lihat</span>
+                                    <span id="aw-toggle-pwd-vis" style="font-size: 11px; color: #00d4ff; cursor: pointer; user-select: none;">Lihat</span>
                                 </div>
                                 <input type="password" id="setting-login-pwd" autocomplete="off" data-lpignore="true" data-form-type="other" placeholder="Kata sandi akunmu" value="${savedCreds?.password || ''}" style="width: 100%; box-sizing: border-box; background: #131724; color: #fff; border: 1px solid #2d364f; border-radius: 6px; padding: 8px 10px; font-size: 12px;">
                             </div>
                             <div style="display: flex; gap: 8px;">
-                                <button id="aw-save-login-creds" style="flex: 1; background: linear-gradient(135deg, #0088ff, #0055cc); color: #fff; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;">💾 Simpan Kredensial</button>
-                                <button id="aw-clear-login-creds" style="background: rgba(255,255,255,0.05); color: #ff5555; border: 1px solid rgba(255,85,85,0.3); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 500;">🗑️ Hapus</button>
+                                <button id="aw-save-login-creds" style="flex: 1; background: linear-gradient(135deg, #0284c7, #0369a1); color: #fff; border: none; padding: 8px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;">Simpan Kredensial</button>
+                                <button id="aw-clear-login-creds" style="background: rgba(255,255,255,0.05); color: #ff5555; border: 1px solid rgba(255,85,85,0.3); padding: 8px 12px; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 500;">Hapus</button>
                             </div>
                             <div id="aw-login-creds-msg" style="font-size: 11px; margin-top: 8px; display: none;"></div>
                         </div>
                     </div>
 
                     <div class="aw-card" style="margin-top: 14px; border-color: rgba(255, 85, 85, 0.2);">
-                        <div class="aw-card-title" style="color: #ff6b6b; margin-bottom: 6px;">⚠️ Zona Bahaya (Reset Total)</div>
+                        <div class="aw-card-title" style="color: #ff6b6b; margin-bottom: 6px;">Zona Bahaya (Reset Total)</div>
                         <div class="aw-card-desc" style="margin-bottom: 12px;">
                             Mengembalikan seluruh preferensi, batas energi, pintasan keyboard, dan posisi panel ke pengaturan awal pabrik.
                         </div>
@@ -644,7 +645,7 @@ export function createSettingsModal(CONFIG, ctx) {
                             color: #ff8888; border: 1px solid rgba(255, 107, 107, 0.4); padding: 9px;
                             border-radius: 6px; cursor: pointer; font-weight: 600;
                             font-size: 12px; width: 100%; transition: all 0.15s;
-                        ">🔄 Pulihkan Semua Pengaturan ke Default</button>
+                        ">Pulihkan Semua Pengaturan ke Default</button>
                     </div>
                 </div>
             </div>
@@ -672,7 +673,7 @@ export function createSettingsModal(CONFIG, ctx) {
                         border-radius: 8px; cursor: pointer; font-weight: 700;
                         font-size: 13px; box-shadow: 0 4px 14px rgba(0,255,136,0.3);
                         transition: transform 0.15s, box-shadow 0.15s;
-                    ">💾 Simpan Pengaturan</button>
+                    ">Simpan Pengaturan</button>
                 </div>
             </div>
         </div>
@@ -819,11 +820,11 @@ export function createSettingsModal(CONFIG, ctx) {
         if (statusEl) {
             if (statusTimer) clearTimeout(statusTimer);
             if (explicit) {
-                statusEl.textContent = `✅ Tersimpan! Batas energi: ${CONFIG.energyThreshold}⚡`;
+                statusEl.textContent = `Tersimpan! Batas energi: ${CONFIG.energyThreshold} EN`;
                 statusEl.style.color = '#00ff88';
                 statusEl.style.display = 'block';
             } else {
-                statusEl.textContent = `💾 Disimpan otomatis (Batas: ${CONFIG.energyThreshold}⚡)`;
+                statusEl.textContent = `Disimpan otomatis (Batas: ${CONFIG.energyThreshold} EN)`;
                 statusEl.style.color = '#00e99a';
                 statusEl.style.display = 'block';
                 statusTimer = setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 2500);
@@ -912,10 +913,10 @@ export function createSettingsModal(CONFIG, ctx) {
         if (!pwdInput) return;
         if (pwdInput.type === 'password') {
             pwdInput.type = 'text';
-            togglePwdBtn.textContent = '🙈 Sembunyikan';
+            togglePwdBtn.textContent = 'Sembunyikan';
         } else {
             pwdInput.type = 'password';
-            togglePwdBtn.textContent = '👁️ Lihat';
+            togglePwdBtn.textContent = 'Lihat';
         }
     });
 
@@ -929,7 +930,7 @@ export function createSettingsModal(CONFIG, ctx) {
         const pwd = pwdInput?.value || '';
         if (!email || !pwd) {
             if (credsMsg) {
-                credsMsg.textContent = '⚠️ Harap isi email dan kata sandi!';
+                credsMsg.textContent = 'Harap isi email dan kata sandi!';
                 credsMsg.style.color = '#ff6b6b';
                 credsMsg.style.display = 'block';
             }
@@ -941,11 +942,11 @@ export function createSettingsModal(CONFIG, ctx) {
         if (chk) chk.checked = true;
         saveConfig(CONFIG);
         if (credsMsg) {
-            credsMsg.textContent = `✅ Kredensial untuk ${email} tersimpan! Auto Re-Login AKTIF.`;
+            credsMsg.textContent = `Kredensial untuk ${email} tersimpan! Auto Re-Login AKTIF.`;
             credsMsg.style.color = '#00ff88';
             credsMsg.style.display = 'block';
         }
-        ctx.log?.('🔐 Kredensial Auto Re-Login berhasil disimpan.', 'success');
+        ctx.log?.('Kredensial Auto Re-Login berhasil disimpan.', 'success');
     });
 
     clearCredsBtn?.addEventListener('click', () => {
@@ -957,7 +958,7 @@ export function createSettingsModal(CONFIG, ctx) {
         if (chk) chk.checked = false;
         saveConfig(CONFIG);
         if (credsMsg) {
-            credsMsg.textContent = '🗑️ Kredensial telah dihapus dari browser.';
+            credsMsg.textContent = 'Kredensial telah dihapus dari browser.';
             credsMsg.style.color = '#ffaa00';
             credsMsg.style.display = 'block';
         }
@@ -972,10 +973,10 @@ export function createSettingsModal(CONFIG, ctx) {
         if (btn && inp) {
             btn.addEventListener('click', () => {
                 recordingState[action.id] = { keys: [], recording: true };
-                btn.textContent = '⏳ Tekan tombol...';
-                btn.style.background = '#ff9500';
+                btn.textContent = 'Tekan tombol...';
+                btn.style.background = '#0284c7';
                 inp.value = 'Menunggu input...';
-                inp.style.color = '#ff9500';
+                inp.style.color = '#38bdf8';
             });
         }
     });
@@ -994,15 +995,15 @@ export function createSettingsModal(CONFIG, ctx) {
             if (key === 'Escape') {
                 rec.recording = false;
                 if (inp) inp.value = CONFIG.shortcuts[action.id]?.display ?? '';
-                if (btn) { btn.textContent = '🎯 Record'; btn.style.background = '#252c40'; }
+                if (btn) { btn.textContent = 'Rekam'; btn.style.background = '#252c40'; }
                 handled = true; return;
             }
             if (key === 'Enter') {
                 if (rec.keys.length > 0) {
                     rec.recording = false;
                     if (btn) {
-                        btn.textContent = '✅ Done'; btn.style.background = '#00ff88'; btn.style.color = '#000';
-                        setTimeout(() => { btn.textContent = '🎯 Record'; btn.style.background = '#252c40'; btn.style.color = '#fff'; }, 1500);
+                        btn.textContent = 'Selesai'; btn.style.background = '#00ff88'; btn.style.color = '#000';
+                        setTimeout(() => { btn.textContent = 'Rekam'; btn.style.background = '#252c40'; btn.style.color = '#fff'; }, 1500);
                     }
                 }
                 handled = true; return;
@@ -1022,8 +1023,8 @@ export function createSettingsModal(CONFIG, ctx) {
             if (rec.keys.length >= 3) {
                 rec.recording = false;
                 if (btn) {
-                    btn.textContent = '✅ Done'; btn.style.background = '#00ff88'; btn.style.color = '#000';
-                    setTimeout(() => { btn.textContent = '🎯 Record'; btn.style.background = '#252c40'; btn.style.color = '#fff'; }, 1500);
+                    btn.textContent = 'Selesai'; btn.style.background = '#00ff88'; btn.style.color = '#000';
+                    setTimeout(() => { btn.textContent = 'Rekam'; btn.style.background = '#252c40'; btn.style.color = '#fff'; }, 1500);
                 }
             }
             handled = true;
@@ -1074,7 +1075,7 @@ export function createSettingsModal(CONFIG, ctx) {
         ctx.log?.('Posisi panel berhasil di-reset ke default', 'success');
         const statusEl = document.getElementById('aw-settings-status');
         if (statusEl) {
-            statusEl.textContent = '📍 Posisi panel di-reset ke default';
+            statusEl.textContent = 'Posisi panel di-reset ke default';
             statusEl.style.color = '#0088ff';
             statusEl.style.display = 'block';
             setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 2500);
@@ -1082,11 +1083,11 @@ export function createSettingsModal(CONFIG, ctx) {
     });
 
     document.getElementById('aw-restore-defaults')?.addEventListener('click', () => {
-        if (!confirm('⚠️ Yakin ingin mengembalikan SEMUA pengaturan ke default?\n\nIni akan:\n- Reset keyboard shortcuts ke Ctrl+Shift+A/L/S dan Alt+Shift+W/P\n- Reset batas energi ke 10⚡\n- Reset semua checkbox dan slider\n- Reset posisi panel\n\nKonfigurasi yang tersimpan akan dihapus!')) return;
+        if (!confirm('Yakin ingin mengembalikan SEMUA pengaturan ke default?\n\nIni akan:\n- Reset keyboard shortcuts\n- Reset batas energi ke 10 EN\n- Reset semua preferensi\n- Reset posisi panel\n\nKonfigurasi yang tersimpan akan dihapus.')) return;
         setValue('aw_config', null);
         setValue('panelX', (CONFIG.panelDefaultX ?? 20).toString());
         setValue('panelY', (CONFIG.panelDefaultY ?? 20).toString());
-        ctx.log?.('🔄 Semua pengaturan berhasil di-reset ke default! Refresh halaman untuk menerapkan.', 'success');
+        ctx.log?.('Semua pengaturan berhasil di-reset ke default! Refresh halaman untuk menerapkan.', 'success');
         setTimeout(() => {
             if (confirm('Pengaturan sudah di-reset. Refresh halaman sekarang?')) location.reload();
         }, 500);
@@ -1102,7 +1103,7 @@ export function createSettingsModal(CONFIG, ctx) {
         const hideBtn = document.getElementById('aw-hide');
         if (hideBtn) hideBtn.title = `Hide (${CONFIG.shortcuts.showHide?.display ?? ''})`;
 
-        ctx.log?.(`Pengaturan disimpan! Batas energi sebelum kerja: ${CONFIG.energyThreshold}⚡`, 'success');
+        ctx.log?.(`Pengaturan disimpan! Batas energi sebelum kerja: ${CONFIG.energyThreshold} EN`, 'success');
         ctx.playNotificationSound?.('success');
         setTimeout(() => closeModal(false), 700);
     });

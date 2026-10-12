@@ -181,7 +181,7 @@ async function doBackgroundWork(isManual = false) {
             status.tokenExpired = true;
             status.pausedForToken = true;
             status.hasToken = false;
-            status.lastLogMessage = `[${nowStr}] ❌ Token expired! Buka game untuk login.`;
+            status.lastLogMessage = `[${nowStr}] Token expired. Buka game untuk login.`;
             await chrome.storage.local.set({
                 aw_live_status: status,
                 aw_auth_token: '',
@@ -189,7 +189,7 @@ async function doBackgroundWork(isManual = false) {
             });
             updateBadge(status, config);
             showDesktopNotification({
-                title: '🔑 Parlamentum: Token Expired!',
+                title: 'Parlamentum: Token Expired',
                 message: config.autoReloginEnabled
                     ? 'Sesi login berakhir. Auto Re-Login mengarahkan ke halaman login...'
                     : 'Sesi login telah berakhir. Silakan buka game dan login ulang.',
@@ -238,7 +238,7 @@ async function doBackgroundWork(isManual = false) {
 
             if (isZeroEnergy || isZeroXp || resData?.error || (typeof resData?.message === 'string' && /energy|unit/i.test(resData.message))) {
                 status.currentEnergy = 0;
-                status.lastLogMessage = `[${nowStr}] Shift tidak menghasilkan XP (energi server belum cukup: 0⚡). Menunggu energi pulih.`;
+                status.lastLogMessage = `[${nowStr}] Shift tidak menghasilkan XP (energi server belum cukup: 0 EN). Menunggu energi pulih.`;
                 appendBackgroundLog(status.lastLogMessage, 'warn');
                 status.updatedAt = Date.now();
                 status.nextWorkTimestamp = Date.now() + 10 * 60000;
@@ -271,7 +271,7 @@ async function doBackgroundWork(isManual = false) {
             status.totalWorkXP   = (status.totalWorkXP || 0) + xpGained;
             status.lastWorkTime  = nowStr;
             status.lastWorkTimestamp = Date.now();
-            status.lastLogMessage = `[${nowStr}] Shift sukses (Background): +${xpGained} XP | Sisa: ${status.currentEnergy}⚡`;
+            status.lastLogMessage = `[${nowStr}] Shift sukses (Background): +${xpGained} XP | Sisa: ${status.currentEnergy} EN`;
             appendBackgroundLog(status.lastLogMessage, 'success');
             status.updatedAt     = Date.now();
             const neededMs = Math.max(1, (config.energyThreshold || 90) - status.currentEnergy) * 60000;
@@ -323,14 +323,14 @@ async function doBackgroundWork(isManual = false) {
             if (config.sendNotification !== false) {
                 showDesktopNotification({
                     title: 'Parlamentum Auto Worker',
-                    message: `⚡ Shift sukses! +${xpGained} XP (Sisa: ${status.currentEnergy}⚡)`,
+                    message: `Shift sukses: +${xpGained} XP (Sisa: ${status.currentEnergy} EN)`,
                     priority: 1
                 });
             }
 
             return { ok: true, xpEarned: xpGained, energyUsed };
         } else if (response.status === 401) {
-            status.lastLogMessage = `[${nowStr}] 🔄 Token expired (401). Me-reload tab game untuk refresh token...`;
+            status.lastLogMessage = `[${nowStr}] Token expired (401). Me-reload tab game untuk refresh token...`;
             appendBackgroundLog(status.lastLogMessage, 'warn');
             await chrome.storage.local.set({ aw_live_status: status });
 
@@ -354,7 +354,7 @@ async function doBackgroundWork(isManual = false) {
 
             // 1. Region / Travel / Transit Error
             if (/region|wilayah|transit|travel|penerbangan/i.test(combined)) {
-                status.lastLogMessage = `[${nowStr}] ⚠️ ${serverMsg || 'Harus berada di wilayah perusahaan untuk bekerja.'}`;
+                status.lastLogMessage = `[${nowStr}] ${serverMsg || 'Harus berada di wilayah perusahaan untuk bekerja.'}`;
                 status.nextWorkTimestamp = Date.now() + 3 * 60000; // retry in 3 minutes
                 appendBackgroundLog(status.lastLogMessage, 'warn');
                 await chrome.storage.local.set({ aw_live_status: status });
@@ -369,7 +369,7 @@ async function doBackgroundWork(isManual = false) {
                 status.updatedAt = Date.now();
                 const neededMs = Math.max(1, (config.energyThreshold || 90) - curEnergy) * 60000;
                 status.nextWorkTimestamp = Date.now() + neededMs;
-                status.lastLogMessage = serverMsg ? `[${nowStr}] ⚠️ ${serverMsg}` : `[${nowStr}] ⚠️ Energi di server belum cukup.`;
+                status.lastLogMessage = serverMsg ? `[${nowStr}] ${serverMsg}` : `[${nowStr}] Energi di server belum cukup.`;
                 appendBackgroundLog(status.lastLogMessage, 'warn');
                 await chrome.storage.local.set({ aw_live_status: status });
                 updateBadge(status, config);
@@ -378,8 +378,8 @@ async function doBackgroundWork(isManual = false) {
 
             // 3. Other errors (funds, materials, etc.)
             status.lastLogMessage = serverMsg
-                ? `[${nowStr}] ⚠️ ${serverMsg}`
-                : `[${nowStr}] ⚠️ Server menolak shift (HTTP ${response.status}).`;
+                ? `[${nowStr}] ${serverMsg}`
+                : `[${nowStr}] Server menolak shift (HTTP ${response.status}).`;
             appendBackgroundLog(status.lastLogMessage, 'warn');
             await chrome.storage.local.set({ aw_live_status: status });
             updateBadge(status, config);

@@ -19,7 +19,7 @@ export function setLogUpdateCallback(fn) { onLogUpdate = fn; }
  */
 export function log(state, CONFIG, message, type = 'info', toActivityLog = true) {
     const now = new Date().toLocaleTimeString('id-ID');
-    const prefix = type === 'error' ? '❌' : type === 'success' ? '✅' : type === 'warn' ? '⚠️' : 'ℹ️';
+    const prefix = type === 'error' ? '[ERROR]' : type === 'success' ? '[OK]' : type === 'warn' ? '[WARN]' : '[INFO]';
 
     // Quiet mode: suppress repeated low-energy warnings
     if (toActivityLog && type === 'warn'
@@ -33,7 +33,7 @@ export function log(state, CONFIG, message, type = 'info', toActivityLog = true)
 
     // Throttle repeated warn/error messages
     if (toActivityLog && (type === 'warn' || type === 'error')) {
-        const throttleKey = /^⏳ Retry dalam /.test(message) ? `${type}:retry` : `${type}:${message}`;
+        const throttleKey = /^Retry dalam /i.test(message) ? `${type}:retry` : `${type}:${message}`;
         const nowMs = Date.now();
         const previous = recentRepeatedLogs.get(throttleKey);
         if (previous && nowMs - previous.time < 30000) {

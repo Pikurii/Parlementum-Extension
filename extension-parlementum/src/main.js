@@ -18,7 +18,6 @@ import { sendNotification, playNotificationSound, playEnergyFullAlarm, showInPag
 import { doWork }                                             from './work.js';
 import { createPanel, updatePanel as _updatePanel, setRunningUI, updatePanelVisibility } from './ui/panel.js';
 import { createSettingsModal, openSettings }                  from './ui/settings.js';
-import { createAnalyticsDashboard, openAnalytics }            from './ui/analytics.js';
 import { createLogViewer, openLogViewer, updateLogViewer }    from './ui/logviewer.js';
 import { setupLoginCapture, tryAutoLogin, getSavedCredentials } from './autologin.js';
 import { initInterceptorClient }                              from './interceptor-client.js';
@@ -95,7 +94,6 @@ import { initInterceptorClient }                              from './intercepto
         // Action helpers expected by panel.js
         doWork:            (manual = false) => doWork(ctx, manual),
         openSettings:      ()            => openSettings(CONFIG, ctx),
-        openAnalytics:     ()            => openAnalytics(state, CONFIG, workHistory, ctx),
         openLogViewer:     ()            => openLogViewer(state, CONFIG),
         saveConfig:        (cfg)         => saveConfig(cfg),
         reloadStateFromStorage: ()       => reloadStateFromStorage(state, () => { workHistory = loadWorkHistory(state, CONFIG); }),
@@ -130,7 +128,7 @@ import { initInterceptorClient }                              from './intercepto
         setValue('xpToday', '0');
         setValue('lastWorkDate', today);
         saveWorkHistory(workHistory);
-        log('🌙 Hari berganti! Counter & Sesi di-reset.', 'info');
+        log('Hari berganti. Counter & sesi di-reset.', 'info');
         updatePanel();
     }
 
@@ -224,7 +222,6 @@ import { initInterceptorClient }                              from './intercepto
     }
     createLogViewer(state, CONFIG);
     createSettingsModal(CONFIG, ctx);
-    createAnalyticsDashboard(state, CONFIG, workHistory, ctx);
     startTokenWatcher(state, handleNewToken, getTokenFn);
 
     // Pantau navigasi SPA jika user logout di dalam game tanpa reload penuh atau pindah halaman
@@ -254,8 +251,8 @@ import { initInterceptorClient }                              from './intercepto
             if (state.currentEnergy != null && state.currentEnergy < 10) {
                 e.preventDefault();
                 e.stopPropagation();
-                log(`⚡ Energi saat ini ${state.currentEnergy}/${state.maxEnergy}⚡ (butuh minimal 10⚡). Menunggu energi pulih.`, 'warn');
-                showInPageNotification(`⚡ Energi belum cukup (${state.currentEnergy}/${state.maxEnergy}⚡). Butuh minimal 10⚡ untuk giliran kerja.`, 'warn');
+                log(`Energi saat ini ${state.currentEnergy}/${state.maxEnergy} EN (butuh minimal 10 EN). Menunggu energi pulih.`, 'warn');
+                showInPageNotification(`Energi belum cukup (${state.currentEnergy}/${state.maxEnergy} EN). Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
             }
         }
     }, true);
@@ -278,18 +275,20 @@ import { initInterceptorClient }                              from './intercepto
             state.lastWorkTimestamp = 0; // Fresh page load: DOM is 100% authoritative ground truth!
             state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
 
-            const healthBuff = getRegionHealthBonus();
+            const regDetails = getRegionDetails(true);
+            const healthBuff = regDetails.bonusMultiplier || 1.0;
             state.regenRate = healthBuff;
-            if (healthBuff > 1.0) {
-                const bonusPct = Math.round((healthBuff - 1.0) * 100);
-                log(`🏥 Buff Kota: Kesehatan +${bonusPct}% pemulihan energi pasif (${healthBuff}x)`, 'info');
+            state.regionHealthBonusPercent = regDetails.bonusPercent || 0;
+            if (state.regionHealthBonusPercent > 0 || healthBuff > 1.0) {
+                const bonusPct = state.regionHealthBonusPercent || Math.round((healthBuff - 1.0) * 100);
+                log(`Buff Kota: Kesehatan +${bonusPct}% pemulihan energi pasif (${healthBuff}x / mnt)`, 'info');
             }
 
-            log(`⚡ Energi terbaca: ${energy.current}/${energy.max}`, 'info');
+            log(`Energi terbaca: ${energy.current}/${energy.max}`, 'info');
             saveLiveStatus(state, CONFIG);
             updatePanel();
         } else {
-            log('⚠️ Elemen energi tidak ditemukan dalam 15 detik. Energi akan terbaca saat panel pertama update.', 'warn');
+            log('Elemen energi tidak ditemukan dalam 15 detik. Energi akan terbaca saat panel update.', 'warn');
         }
     });
 
@@ -314,7 +313,7 @@ import { initInterceptorClient }                              from './intercepto
                     return true;
                 }
                 if (msg.action === 'workNow') {
-                    log('⚡ Manual work dipicu via Popup toolbar!', 'info');
+                    log('Manual work dipicu via Popup toolbar.', 'info');
                     if (state.tokenExpired || state.pausedForToken || !state.currentToken) {
                         sendResponse({ ok: false, error: 'token_expired' });
                         return true;
@@ -419,7 +418,7 @@ import { initInterceptorClient }                              from './intercepto
                             return;
                         }
 
-                        log('⚡ Trigger background: Menjalankan shift kerja otomatis...', 'info');
+                        log('Trigger background: Menjalankan shift kerja otomatis...', 'info');
                         const result = await doWork(ctx, Boolean(msg.manual));
                         saveLiveStatus(state, CONFIG, true);
                         updatePanel();
@@ -468,7 +467,7 @@ import { initInterceptorClient }                              from './intercepto
                             const isCooldownActive = state.nextWorkTimestamp && (Date.now() < state.nextWorkTimestamp - 5000);
                             const hasRecentWork = state.lastWorkTimestamp && (Date.now() - state.lastWorkTimestamp < 45000);
                             if (state.isTabLockOwner && state.currentEnergy >= CONFIG.energyThreshold && !isCooldownActive && !hasRecentWork && !state.workInFlight && !state.workResultUncertain) {
-                                log('⚡ Background wake: Energi target tercapai, mengeksekusi shift kerja...', 'info');
+                                log('Background wake: Energi target tercapai, mengeksekusi shift kerja...', 'info');
                                 const result = await doWork({ ...ctx }, false);
                                 saveLiveStatus(state, CONFIG);
                                 updatePanel();
@@ -690,7 +689,7 @@ function _runMigrations(state, CONFIG, workHistory) {
     if (state.totalEnergySpent < state.totalWorked * 5 && state.totalWorked > 0) {
         state.totalEnergySpent = state.totalWorked * 10;
         setValue('totalEnergySpent', state.totalEnergySpent.toString());
-        console.log('[Init] 🔧 Estimasi energi masa lalu diterapkan (migrasi sekali jalan).');
+        console.log('[Init] Estimasi energi masa lalu diterapkan (migrasi sekali jalan).');
     }
     setValue('aw_energySchemaVersion', '2');
 }
@@ -702,7 +701,7 @@ function _checkAndRefreshToken(state, CONFIG, log, ctx = null) {
     const remaining = state.tokenExpiry - Date.now();
     if (remaining <= 0) {
         if (!state.pausedForToken) {
-            log('🔄 Token sesi kedaluwarsa. Me-reload tab otomatis untuk memperbarui token via session cookie...', 'warn');
+            log('Token sesi kedaluwarsa. Me-reload tab otomatis untuk memperbarui token...', 'warn');
             state.pausedForToken = true;
             setTimeout(() => {
                 window.location.reload();
@@ -727,12 +726,12 @@ function _setTabLockOwner(state, isOwner, ctx) {
 
 function _logStartup(log, CONFIG, state) {
     const uptime = Math.floor((Date.now() - state.scriptStartTime) / 1000);
-    log('🚀 Auto Worker v5.11.0 HARDENED (Network Interceptor) aktif!', 'success');
-    log(`⚡ Energy Threshold: ${CONFIG.energyThreshold} (ubah di Settings)`, 'info');
-    log(`🗓️ History: simpan ${CONFIG.historyMaxDays} hari terakhir`, 'info');
-    log(`🔇 Quiet mode: ${CONFIG.quietModeEnabled ? 'ON' : 'OFF'}`, 'info');
-    log(`⌨️ Shortcuts: ${Object.values(CONFIG.shortcuts).map(s => s.display).join(', ')}`, 'info');
-    log(`⏱️ Script uptime: ${uptime}s`, 'info');
+    log('Auto Worker v5.11.0 (Network Interceptor) aktif.', 'success');
+    log(`Energy Threshold: ${CONFIG.energyThreshold} EN`, 'info');
+    log(`History: simpan ${CONFIG.historyMaxDays} hari terakhir`, 'info');
+    log(`Quiet mode: ${CONFIG.quietModeEnabled ? 'ON' : 'OFF'}`, 'info');
+    log(`Shortcuts: ${Object.values(CONFIG.shortcuts).map(s => s.display).join(', ')}`, 'info');
+    log(`Script uptime: ${uptime}s`, 'info');
 }
 
 function _watchSpaNavigation(onRouteChanged) {

@@ -71,8 +71,8 @@ export function setupLoginCapture(logFn) {
 
             if (emailInput?.value && passInput?.value) {
                 saveCredentials(emailInput.value, passInput.value);
-                console.log('[Auto Worker] 🔐 Kredensial login berhasil disimpan otomatis untuk Auto Re-Login.');
-                logFn?.('🔐 Kredensial login berhasil diperbarui otomatis!', 'info');
+                console.log('[Auto Worker] Kredensial login berhasil disimpan otomatis untuk Auto Re-Login.');
+                logFn?.('Kredensial login berhasil diperbarui otomatis.', 'info');
             }
         } catch { /* ignore */ }
     }
@@ -145,8 +145,8 @@ export async function tryAutoLogin(CONFIG, logFn, sendNotificationFn) {
 
     const creds = getSavedCredentials();
     if (!creds?.email || !creds?.password) {
-        console.log('[Auto Worker] 🔐 Auto Re-Login aktif tetapi belum ada email & kata sandi tersimpan.');
-        logFn?.('🔐 Auto Re-Login aktif tetapi belum ada email & kata sandi tersimpan. Silakan isi di Settings atau login manual sekali.', 'info');
+        console.log('[Auto Worker] Auto Re-Login aktif tetapi belum ada email & kata sandi tersimpan.');
+        logFn?.('Auto Re-Login aktif tetapi belum ada email & kata sandi tersimpan. Silakan isi di Settings atau login manual.', 'info');
         return false;
     }
 
@@ -157,22 +157,22 @@ export async function tryAutoLogin(CONFIG, logFn, sendNotificationFn) {
     } catch { /* ignore */ }
 
     if (attempts >= 2) {
-        console.warn('[Auto Worker] ⚠️ Auto Re-Login dihentikan sementara: telah mencoba 2x.');
-        logFn?.('⚠️ Auto Re-Login dihentikan sementara: telah mencoba 2x. Silakan login manual untuk verifikasi akun.', 'error');
+        console.warn('[Auto Worker] Auto Re-Login dihentikan sementara: telah mencoba 2x.');
+        logFn?.('Auto Re-Login dihentikan sementara: telah mencoba 2x. Silakan login manual untuk verifikasi akun.', 'error');
         sendNotificationFn?.(CONFIG, 'Auto Re-Login Dihentikan', 'Mencapai batas 2x percobaan. Silakan periksa akun.');
         return false;
     }
 
-    console.log('[Auto Worker] ⏳ Halaman login terdeteksi. Mempersiapkan Auto Re-Login...');
-    logFn?.('⏳ Halaman login terdeteksi. Memulai Auto Re-Login dalam 1.5 detik...', 'info');
+    console.log('[Auto Worker] Halaman login terdeteksi. Mempersiapkan Auto Re-Login...');
+    logFn?.('Halaman login terdeteksi. Memulai Auto Re-Login dalam 1.5 detik...', 'info');
 
     // Give React SPA 1.2s to finish hydrating its component tree
     await new Promise(r => setTimeout(r, 1200));
 
     const elements = await waitForLoginInputs(10000);
     if (!elements) {
-        console.warn('[Auto Worker] ⚠️ Elemen form login tidak ditemukan dalam 10 detik.');
-        logFn?.('⚠️ Elemen form login tidak ditemukan dalam 10 detik.', 'warn');
+        console.warn('[Auto Worker] Elemen form login tidak ditemukan dalam 10 detik.');
+        logFn?.('Elemen form login tidak ditemukan dalam 10 detik.', 'warn');
         return false;
     }
 
@@ -191,8 +191,8 @@ export async function tryAutoLogin(CONFIG, logFn, sendNotificationFn) {
 
     await new Promise(r => setTimeout(r, 600));
 
-    console.log(`[Auto Worker] 🔑 Mengirim login otomatis untuk ${creds.email}...`);
-    logFn?.(`🔑 Mengirim login otomatis untuk ${creds.email}...`, 'info');
+    console.log(`[Auto Worker] Mengirim login otomatis untuk ${creds.email}...`);
+    logFn?.(`Mengirim login otomatis untuk ${creds.email}...`, 'info');
     sendNotificationFn?.(CONFIG, 'Auto Re-Login', `Mencoba masuk otomatis sebagai ${creds.email}...`);
 
     submitBtn.click();

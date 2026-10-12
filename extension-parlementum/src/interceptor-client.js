@@ -98,26 +98,22 @@ function _handleEnergySync(state, msg, ctx) {
 }
 
 function _handleWorkSuccess(state, msg, ctx) {
-    const used = Number(msg.energyUsed) || 10;
-    const xp = Number(msg.xpEarned) || 0;
+    const rawUsed = Number(msg.energyUsed) || Number(msg.raw?.energyUsed) || 0;
+    const used = rawUsed >= 10 ? rawUsed : 10;
+    // In Parlamentum, each block of 10 energy yields 4 XP
+    const calculatedXp = Math.max(4, Math.floor(used / 10) * 4);
+    const xp = Number(msg.xpEarned) > 0 ? Number(msg.xpEarned) : calculatedXp;
+    const units = Number(msg.workerUnits) || Number(msg.produced) || Number(msg.raw?.workerUnits) || Number(msg.raw?.produced) || 0;
 
-    // If extension initiated the work, work.js already handles state and logging
-    if (state.workInFlight) {
-        if (msg.remainingEnergy != null && typeof msg.remainingEnergy === 'number') {
-            state.currentEnergy = Math.max(0, Math.round(msg.remainingEnergy));
-        } else {
-            state.currentEnergy = Math.max(0, (state.currentEnergy || 0) - used);
-        }
-        state.energySyncBase = {
-            current: state.currentEnergy,
-            max: state.maxEnergy || 110,
-            updatedAt: Date.now()
-        };
-        patchPageVisualEnergy(state.currentEnergy, state.maxEnergy, true);
+    // If extension initiated the fetch directly, work.js already manages state & logging
+    if (state.workInFlight && !state.workTriggeredViaDom) {
         return;
     }
 
-    // External work shift (e.g. user clicked button manually on web page)
+    const wasDomTriggered = Boolean(state.workTriggeredViaDom);
+    state.workTriggeredViaDom = false;
+    state.workInFlight = false;
+
     if (msg.remainingEnergy != null && typeof msg.remainingEnergy === 'number') {
         state.currentEnergy = Math.max(0, Math.round(msg.remainingEnergy));
     } else {
@@ -137,14 +133,32 @@ function _handleWorkSuccess(state, msg, ctx) {
     state.totalWorkXP = (state.totalWorkXP || 0) + xp;
     state.lastWorkTime = nowStr;
     state.lastWorkTimestamp = Date.now();
+    if (ctx?.getNextWorkDelay) {
+        state.nextWorkTimestamp = Date.now() + ctx.getNextWorkDelay(state);
+    }
 
     ctx?.setValue?.('workToday', state.workToday);
     ctx?.setValue?.('totalWorked', state.totalWorked);
     ctx?.setValue?.('xpToday', state.xpToday);
     ctx?.setValue?.('totalWorkXP', state.totalWorkXP);
 
-    ctx?.log?.(`⚡ Shift di game terdeteksi (Anti-Desync): +${xp} XP | Sisa: ${state.currentEnergy}⚡`, 'success');
+    const unitsPart = units > 0 ? ` | +${units} unit` : '';
+    const logMsg = wasDomTriggered
+        ? `Kerja sukses! +${xp} XP${unitsPart} | Sisa: ${state.currentEnergy}/${state.maxEnergy} EN`
+        : `Shift di game terdeteksi: +${xp} XP${unitsPart} | Sisa: ${state.currentEnergy} EN`;
+    ctx?.log?.(logMsg, 'success');
     ctx?.updatePanel?.();
+
+    // After 600ms, sync ground-truth energy from the newly updated page DOM
+    setTimeout(() => {
+        const fresh = ctx?.getCurrentEnergy?.();
+        if (fresh && fresh.current !== state.currentEnergy) {
+            state.currentEnergy = fresh.current;
+            state.maxEnergy = fresh.max;
+            state.energySyncBase = { current: fresh.current, max: fresh.max, updatedAt: Date.now() };
+            ctx?.updatePanel?.();
+        }
+    }, 600);
 }
 
 function _handleWorkRejected(state, msg, ctx) {

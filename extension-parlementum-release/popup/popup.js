@@ -98,17 +98,17 @@ function renderUI() {
         elStatusBadge.className = 'status-badge paused';
         elStatusText.textContent = 'EXPIRED';
         btnToggle.className = 'btn btn-toggle-resume';
-        btnToggleText.textContent = '🔑 Perlu Login Ulang';
+        btnToggleText.textContent = 'Perlu Login Ulang';
     } else if (isRunning) {
         elStatusBadge.className = 'status-badge';
         elStatusText.textContent = 'RUNNING';
         btnToggle.className = 'btn btn-toggle-pause';
-        btnToggleText.textContent = '⏸ Jeda Auto Worker';
+        btnToggleText.textContent = 'Jeda Auto Worker';
     } else {
         elStatusBadge.className = 'status-badge paused';
         elStatusText.textContent = 'PAUSED';
         btnToggle.className = 'btn btn-toggle-resume';
-        btnToggleText.textContent = '▶ Lanjutkan Auto Worker';
+        btnToggleText.textContent = 'Lanjutkan Auto Worker';
     }
 
     // Region & Buff
@@ -129,7 +129,7 @@ function renderUI() {
 
     // 2. Energy
     elEnergyVal.textContent = `${currentE}/${maxE}`;
-    elEnergyTarget.textContent = `Target: ${threshold}⚡`;
+    elEnergyTarget.textContent = `Target: ${threshold} EN`;
     elBarFill.style.width = `${pct}%`;
 
     // 3. Accurate Countdown Logic
@@ -140,26 +140,26 @@ function renderUI() {
     }
 
     if (isExpired) {
-        elNextWork.textContent = '🔑 Token Expired!';
+        elNextWork.textContent = 'Token Kadaluarsa';
         elNextWork.style.color = '#ff4444';
         elNextWork.title = '';
     } else if (!isRunning) {
-        elNextWork.textContent = '⏸️ Dijeda';
+        elNextWork.textContent = 'Dijeda';
         elNextWork.style.color = '#ff6b6b';
         elNextWork.title = '';
     } else if (_isSleepTime(currentConfig)) {
-        elNextWork.textContent = '🌙 Jam Tidur';
+        elNextWork.textContent = 'Jam Istirahat';
         elNextWork.style.color = '#a0a0b0';
         elNextWork.title = '';
     } else if (currentE >= threshold) {
-        elNextWork.textContent = '⚡ Siap bekerja!';
+        elNextWork.textContent = 'Siap bekerja';
         elNextWork.style.color = '#00ff88';
-        elNextWork.title = 'Energi sudah mencapai target! Siap bekerja.';
+        elNextWork.title = 'Energi sudah mencapai target. Siap bekerja.';
     } else if (remaining > 0) {
         const sec = Math.ceil(remaining / 1000);
         const m = Math.floor(sec / 60);
         const s = sec % 60;
-        elNextWork.textContent = `⏳ ${m}m ${String(s).padStart(2, '0')}s`;
+        elNextWork.textContent = `${m}m ${String(s).padStart(2, '0')}s`;
         elNextWork.style.color = '#00d9ff';
         if (currentStatus.nextWorkTimestamp && currentStatus.nextWorkTimestamp > now) {
             const d = new Date(currentStatus.nextWorkTimestamp);
@@ -167,7 +167,7 @@ function renderUI() {
             elNextWork.title = `Estimasi kerja pukul ${timeStr} WIB`;
         }
     } else {
-        elNextWork.textContent = '⚡ Menunggu energi...';
+        elNextWork.textContent = 'Menunggu energi...';
         elNextWork.style.color = '#ffaa00';
         elNextWork.title = '';
     }
@@ -191,10 +191,10 @@ function renderUI() {
 
     // 6. Action button hints
     if (isExpired) {
-        btnOpen.textContent = '🔑 Buka & Login Game';
+        btnOpen.textContent = 'Buka & Login Game';
         btnOpen.style.borderColor = 'rgba(255, 68, 68, 0.4)';
     } else {
-        btnOpen.textContent = '🌐 Buka Tab Parlamentum';
+        btnOpen.textContent = 'Buka Tab Parlamentum';
         btnOpen.style.borderColor = '';
     }
 
@@ -328,11 +328,11 @@ btnWork.addEventListener('click', () => {
     );
 
     if (isExpired) {
-        btnWork.textContent = '🔑 Token Expired! Login Ulang';
-        btnWork.style.background = 'linear-gradient(135deg, #ff4444, #cc0000)';
+        btnWork.textContent = 'Token Kadaluarsa! Login Ulang';
+        btnWork.style.background = 'linear-gradient(135deg, #ef4444, #b91c1c)';
         btnWork.style.color = '#fff';
         setTimeout(() => {
-            btnWork.textContent = '⚡ Kerja Sekarang (Manual)';
+            btnWork.textContent = 'Kerja Sekarang';
             btnWork.style.background = '';
             btnWork.style.color = '';
         }, 2500);
@@ -340,37 +340,37 @@ btnWork.addEventListener('click', () => {
     }
 
     btnWork.disabled = true;
-    const origText = '⚡ Kerja Sekarang (Manual)';
-    btnWork.textContent = '⏳ Mengirim shift kerja...';
+    const origText = 'Kerja Sekarang';
+    btnWork.textContent = 'Mengirim shift kerja...';
 
     chrome.runtime.sendMessage({
         type: 'POPUP_TO_TAB',
         action: 'workNow'
     }, res => {
         if (res && res.ok) {
-            btnWork.textContent = '✅ Shift sukses!';
-            btnWork.style.background = 'linear-gradient(135deg, #00ff88, #00cc66)';
-            btnWork.style.color = '#000';
+            btnWork.textContent = 'Shift berhasil!';
+            btnWork.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+            btnWork.style.color = '#fff';
             setTimeout(() => loadData(), 500);
         } else {
-            let err = '⚠️ Gagal';
+            let err = 'Gagal';
             if (res?.error === 'token_expired' || res?.error === 'no_token') {
-                err = '🔑 Token Expired! Login Ulang';
+                err = 'Token Kadaluarsa! Login Ulang';
             } else if (res?.error === 'insufficient_energy') {
-                err = '⚠️ Energi belum cukup!';
+                err = 'Energi belum cukup!';
             } else if (res?.error === 'busy') {
-                err = '⏳ Sedang bekerja...';
+                err = 'Sedang bekerja...';
             } else if (res?.error === 'waiting') {
-                err = '⏳ Menunggu giliran...';
+                err = 'Menunggu giliran...';
             } else if (res?.error === 'region_mismatch') {
-                err = '⚠️ Lokasi wilayah tidak cocok!';
+                err = 'Lokasi wilayah tidak cocok!';
             } else if (res?.message) {
-                err = `⚠️ ${res.message.slice(0, 32)}`;
+                err = res.message.slice(0, 32);
             } else {
-                err = `⚠️ Gagal (${res?.error || 'timeout'})`;
+                err = `Gagal (${res?.error || 'timeout'})`;
             }
             btnWork.textContent = err;
-            btnWork.style.background = 'linear-gradient(135deg, #ff4444, #cc0000)';
+            btnWork.style.background = 'linear-gradient(135deg, #ef4444, #b91c1c)';
             btnWork.style.color = '#fff';
             setTimeout(() => loadData(), 400);
         }

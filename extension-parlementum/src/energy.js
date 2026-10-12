@@ -176,33 +176,21 @@ export function getSyncedEnergy(state) {
 
     const pageEnergy = getCurrentEnergy();
 
-    // 2. Stale DOM protection: If a shift occurred recently (within 5 minutes),
-    // an un-refreshed background tab still has the old pre-shift HTML in memory.
-    if (state.lastWorkTimestamp && (now - state.lastWorkTimestamp < 300000)) {
-        const elapsedMins = Math.floor((now - state.lastWorkTimestamp) / 60000);
-        const postShiftEnergy = state.postShiftEnergy ?? 0;
-        const theoreticalMax = Math.min(state.maxEnergy || 115, postShiftEnergy + elapsedMins);
-        if (pageEnergy && pageEnergy.current > theoreticalMax + 2) {
-            // DOM still displays old pre-shift number. Use legitimate regenerated energy.
-            return { current: theoreticalMax, max: state.maxEnergy || 115 };
-        }
-    }
-
-    // 3. Visible DOM is ground truth when page is active and not hidden
-    if (pageEnergy && !isHidden && !state.domEnergyStale) {
+    // 1. Visible DOM is ALWAYS ground truth when tab is in foreground!
+    if (pageEnergy && !isHidden) {
         state.domEnergyStale = false;
-        if (!state.energySyncBase || state.energySyncBase.current !== pageEnergy.current || state.energySyncBase.max !== pageEnergy.max) {
-            state.energySyncBase = { current: pageEnergy.current, max: pageEnergy.max, updatedAt: now };
-        }
+        state.currentEnergy = pageEnergy.current;
+        state.maxEnergy = pageEnergy.max;
+        state.energySyncBase = { current: pageEnergy.current, max: pageEnergy.max, updatedAt: now };
         return pageEnergy;
     }
 
-    // 4. Fallback estimation when DOM is empty or transitioning
+    // 2. Eco Mode / Background Tab: Use O(1) mathematical calculation when invisible or transitioning
     const syncBase = state.energySyncBase;
     if (syncBase && typeof syncBase.current === 'number') {
         const max = syncBase.max || state.maxEnergy || 115;
         const elapsedMins = syncBase.updatedAt ? (now - syncBase.updatedAt) / 60000 : 0;
-        const regenRate = state.regenRate || 1.0;
+        const regenRate = state.regenRate || getRegionHealthBonus() || 1.0;
         const gained = Math.floor(elapsedMins * regenRate);
         const calculated = Math.min(max, syncBase.current + Math.max(0, gained));
         return { current: calculated, max };
@@ -239,87 +227,198 @@ let _lastRegionScanTime = 0;
  * @param {boolean} [force=false]
  * @returns {{ name: string, level: number, bonusPercent: number, bonusMultiplier: number }}
  */
+/**
+ * Reads the authoritative "Penuh dalam <time>" string directly from the game's dashboard DOM.
+ * @returns {string|null} e.g. "1 j", "45 mnt", "1 j 15 mnt"
+ */
+export function getGameEnergyFullText() {
+    try {
+        const isExcluded = el => Boolean(
+            el.closest('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')
+        );
+        const energyHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
+        for (const h of energyHeaders) {
+            if (isExcluded(h)) continue;
+            const t = (h.textContent || '').trim();
+            if (/^⚡?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 25) {
+                let card = h.parentElement;
+                for (let level = 0; level < 4 && card && card !== document.body; level++) {
+                    const txt = card.innerText || card.textContent || '';
+                    const m = txt.match(/Penuh\s+dalam\s+([0-9\sA-Za-z<]+?)(?:\n|$|\.|\()/i);
+                    if (m && m[1]) {
+                        const raw = m[1].trim();
+                        if (raw.length > 0 && raw.length <= 15) return raw;
+                    }
+                    card = card.parentElement;
+                }
+            }
+        }
+        const bodyText = document.body ? (document.body.innerText || '') : '';
+        const m = bodyText.match(/Penuh\s+dalam\s+([0-9\sA-Za-z<]+?)(?:\n|$|\.|\()/i);
+        if (m && m[1]) {
+            const raw = m[1].trim();
+            if (raw.length > 0 && raw.length <= 15) return raw;
+        }
+    } catch { /* ignore */ }
+    return null;
+}
+
 export function getRegionDetails(force = false) {
     if (typeof document === 'undefined') {
         return { name: 'Wilayah', level: 0, bonusPercent: 0, bonusMultiplier: 1.0 };
     }
     const now = Date.now();
-    if (!force && _cachedRegionDetails && (now - _lastRegionScanTime < 30000)) {
+    if (!force && _cachedRegionDetails && (now - _lastRegionScanTime < 10000)) {
         return _cachedRegionDetails;
     }
     let name = '';
     let level = 0;
+    let bonusPercent = 0;
+    let scrapedRate = 0;
+    let bodyText = '';
+
     try {
-        // 1. Check for "DITEMPATKAN DI" card heading
-        const allHeadings = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
-        for (const h of allHeadings) {
-            const txt = (h.textContent || '').trim();
-            if (/^DITEMPATKAN\s+DI\b/i.test(txt) && txt.length < 30) {
-                let next = h.nextElementSibling;
-                if (!next && h.parentElement) {
-                    const children = Array.from(h.parentElement.children);
-                    const idx = children.indexOf(h);
-                    if (idx !== -1 && idx + 1 < children.length) {
-                        next = children[idx + 1];
-                    }
-                }
-                if (next) {
-                    const candidate = (next.textContent || '').trim();
-                    if (candidate && candidate.length < 40) {
-                        name = candidate;
-                        break;
-                    }
-                }
-            }
+        // Collect text from document.body AND any active or mounted tooltips
+        const textParts = [];
+        if (document.body) textParts.push(document.body.innerText || '');
+        const tooltips = document.querySelectorAll('[role="tooltip"], [data-radix-popper-content-wrapper], [class*="tooltip" i], [class*="popover" i]');
+        for (const tip of tooltips) {
+            textParts.push(tip.innerText || tip.textContent || '');
+        }
+        bodyText = textParts.join('\n');
+
+        // 1. Region Name Priority A: "Kamu di sini — <Wilayah>"
+        const kamuMatch = bodyText.match(/Kamu\s+di\s+sini\s*[—–-]\s*([A-Za-zÀ-ÿ\s]{2,30})/i);
+        if (kamuMatch && kamuMatch[1]) {
+            name = kamuMatch[1].trim();
         }
 
-        // 2. Fallback: check user profile subtitle under avatar (e.g. "Jakarta, Negara Kesatuan...")
+        // Priority B: "DITEMPATKAN DI \n <Wilayah>"
         if (!name) {
-            const topbar = document.querySelector('header, nav, [role="banner"]');
-            if (topbar) {
-                const subtext = topbar.querySelectorAll('span, div, p');
-                for (const st of subtext) {
-                    const t = (st.textContent || '').trim();
-                    if (t.includes('Negara Kesatuan Republik') || t.includes('USD')) {
-                        const parts = t.split(/[,·]/);
-                        if (parts.length > 0 && parts[0].trim().length < 30) {
-                            name = parts[0].trim();
-                            break;
-                        }
-                    }
+            const ditempatkanMatch = bodyText.match(/DITEMPATKAN\s+DI[^\n]*\n+([A-Za-zÀ-ÿ\s]{2,30})\n/i);
+            if (ditempatkanMatch && ditempatkanMatch[1]) {
+                const cand = ditempatkanMatch[1].trim();
+                if (!/^(?:DI\s+PETA|PETA|MAP)\b/i.test(cand)) {
+                    name = cand;
                 }
             }
         }
 
-        // 3. Health bonus level
-        const el = document.querySelector('[data-testid="region-index-health"]');
-        if (el) {
-            const aria = el.querySelector('[aria-label*="Kesehatan"]')?.getAttribute('aria-label');
-            const ariaMatch = aria?.match(/Kesehatan\s+(\d+)/i);
-            if (ariaMatch) {
-                level = parseInt(ariaMatch[1], 10);
-            } else {
-                const text = (el.textContent || '').trim();
-                const matches = text.match(/\b([0-9]|10)\b/g);
-                if (matches && matches.length > 0) {
-                    level = parseInt(matches[matches.length - 1], 10);
+        // Priority C: "Negara Kesatuan Republik Indonesia \n <Wilayah>"
+        if (!name) {
+            const nkriMatch = bodyText.match(/(?:Negara\s+Kesatuan\s+Republik\s+Indonesia|NKRI)[^\n]*\n+([A-Za-zÀ-ÿ\s]{2,30})\n/i);
+            if (nkriMatch && nkriMatch[1]) {
+                name = nkriMatch[1].trim();
+            }
+        }
+
+        // Priority D: Topbar header
+        if (!name) {
+            const topMatch = bodyText.match(/\d\d:\d\d\s+UTC\s*\n*([A-Za-zÀ-ÿ\s]{2,30})/i);
+            if (topMatch && topMatch[1]) {
+                name = topMatch[1].trim();
+            }
+        }
+
+        // Clean and format name to Title Case
+        if (name) {
+            name = name.split('\n')[0].trim();
+            name = name.toLowerCase().replace(/\b[a-zÀ-ÿ]/g, c => c.toUpperCase());
+        }
+
+        // 2. Health Level / Regen Bonus & Rate Detection
+        // Priority A: Scrape exact rate from game tooltip: "+1.54 / mnt" or "+1.5 / mnt"
+        const rateMatch = bodyText.match(/(?:REGENERASI\s+ENERGI[^\n\d]*)?\+([0-9.]+)\s*\/\s*(?:mnt|min)/i);
+        if (rateMatch && rateMatch[1]) {
+            const val = parseFloat(rateMatch[1]);
+            if (val >= 0.5 && val <= 10.0) {
+                scrapedRate = val;
+            }
+        }
+
+        // Priority B: Check for explicit tooltip "Kesehatan kota: +55%" or "+50%"
+        const tipMatch = bodyText.match(/Kesehatan\s*(?:kota|wilayah)?\s*:\s*\+?(\d+)%/i);
+        if (tipMatch && tipMatch[1]) {
+            bonusPercent = parseInt(tipMatch[1], 10);
+            level = Math.round(bonusPercent / 5);
+        }
+
+        // Priority C: Check for Crown Bonus multiplier: e.g. "BONUS INDEKS *1.10" or "BONUS INDEKS ×1.10"
+        let crownMult = 1.0;
+        const crownMatch = bodyText.match(/BONUS\s+INDEKS[^\d\n]*(\d+(?:\.\d+)?)/i);
+        if (crownMatch && crownMatch[1]) {
+            const parsedCrown = parseFloat(crownMatch[1]);
+            if (parsedCrown >= 1.0 && parsedCrown <= 2.0) {
+                crownMult = parsedCrown;
+            }
+        }
+
+        // Priority D: Check for "KESEHATAN 10" in the index card
+        if (!level && !bonusPercent) {
+            const kesMatch = bodyText.match(/\bKESEHATAN\b[^\d\n]*(\d+)/i);
+            if (kesMatch && kesMatch[1]) {
+                level = parseInt(kesMatch[1], 10);
+                // Health bonus = 5 * level * crownMult (e.g. 10 * 5 * 1.10 = 55%)
+                bonusPercent = Math.round(level * 5 * crownMult);
+            }
+        }
+
+        // Priority E: Check for data-testid as fallback
+        if (!level && !bonusPercent) {
+            const el = document.querySelector('[data-testid="region-index-health"]');
+            if (el) {
+                const aria = el.querySelector('[aria-label*="Kesehatan"]')?.getAttribute('aria-label');
+                const m = aria?.match(/Kesehatan\s+(\d+)/i);
+                if (m) {
+                    level = parseInt(m[1], 10);
+                    bonusPercent = Math.round(level * 5 * crownMult);
                 }
             }
         }
-    } catch { /* ignore */ }
+    } catch (err) {
+        console.error('[getRegionDetails] Error:', err);
+    }
 
-    level = Math.max(0, Math.min(10, level));
-    const bonusPercent = level * 5;
-    const bonusMultiplier = 1 + (bonusPercent / 100);
+    // Mathematical calibration between bonusPercent and scrapedRate
+    if (scrapedRate > 0 && !bonusPercent) {
+        bonusPercent = Math.round((scrapedRate - 1) * 100);
+    }
+    if (bonusPercent > 0 && !scrapedRate) {
+        // Parlamentum formula: tick interval = round(60 / (1 + bonus/100)), rate = 60 / tickSec
+        const mult = 1 + (bonusPercent / 100);
+        const tickSec = Math.round(60 / mult);
+        scrapedRate = Math.round((60 / tickSec) * 100) / 100;
+    }
+
+    level = Math.max(0, Math.min(15, level || Math.round(bonusPercent / 5)));
+    if (!bonusPercent && level > 0) {
+        bonusPercent = level * 5;
+    }
+
+    // Preserve previously confirmed higher values for the same region (prevents drop if tooltip unmounts)
+    if (_cachedRegionDetails && _cachedRegionDetails.name === (name || _cachedRegionDetails.name)) {
+        if (_cachedRegionDetails.bonusPercent > bonusPercent && !bodyText.includes('Kesehatan')) {
+            bonusPercent = _cachedRegionDetails.bonusPercent;
+        }
+        if (_cachedRegionDetails.bonusMultiplier > scrapedRate && !bodyText.includes('/mnt')) {
+            scrapedRate = _cachedRegionDetails.bonusMultiplier;
+        }
+    }
+
+    const finalMultiplier = scrapedRate > 0 ? scrapedRate : (1 + (bonusPercent / 100));
 
     const result = {
-        name: name || 'Wilayah',
+        name: name || (_cachedRegionDetails?.name) || 'Jawa Barat',
         level,
-        bonusPercent,
-        bonusMultiplier
+        bonusPercent: bonusPercent || (_cachedRegionDetails?.bonusPercent) || 0,
+        bonusMultiplier: finalMultiplier || 1.0
     };
-    _cachedRegionDetails = result;
-    _lastRegionScanTime = now;
+
+    if (name || level > 0 || bonusPercent > 0 || scrapedRate > 0) {
+        _cachedRegionDetails = result;
+        _lastRegionScanTime = now;
+    }
+
     return result;
 }
 
@@ -366,7 +465,7 @@ export function getNextWorkDelay(state, CONFIG) {
 
 /** @param {object} state @param {object} CONFIG @returns {string} */
 export function getLiveCountdown(state, CONFIG) {
-    if (isSleepTime(CONFIG)) return '🌙 Tidur';
+    if (isSleepTime(CONFIG)) return 'Tidur';
     const threshold = CONFIG.energyThreshold || 10;
     const curEnergy = state.currentEnergy ?? 0;
     if (curEnergy >= threshold) return 'Now!';
@@ -382,15 +481,23 @@ export function getLiveCountdown(state, CONFIG) {
 
 /** @param {object} state @returns {string} */
 export function getTimeToFullEnergy(state) {
-    const needed = state.maxEnergy - state.currentEnergy;
+    const maxE = Math.max(50, state.maxEnergy || 115);
+    const curE = Math.max(0, state.currentEnergy ?? 0);
+    const needed = Math.max(0, maxE - curE);
     if (needed <= 0) return 'Penuh!';
-    const regenRate = state.regenRate || 1.0;
-    const minutes = Math.ceil(needed / regenRate);
-    if (minutes < 60) return `~${minutes}m`;
-    const h = Math.floor(minutes / 60), m = minutes % 60;
-    if (h < 24) return `~${h}h ${m}m`;
+
+    const regenRate = Math.max(0.5, state.regenRate || 1.0);
+    const exactMinutes = Math.max(1, Math.round(needed / regenRate));
+
+    if (exactMinutes < 60) {
+        return `~${exactMinutes} mnt`;
+    }
+    const h = Math.max(0, Math.floor(exactMinutes / 60));
+    const m = Math.max(0, exactMinutes % 60);
+    if (m === 0) return `~${h} j`;
+    if (h < 24) return `~${h} j ${m} mnt`;
     const d = Math.floor(h / 24);
-    return `~${d}d ${h % 24}h`;
+    return `~${d} hari ${h % 24} j`;
 }
 
 let _playerLevelLastScan = 0;
@@ -447,7 +554,7 @@ export function patchPageVisualEnergy(current, max, force = false) {
 
         const pct = Math.min(100, Math.max(0, (safeCurrent / safeMax) * 100)).toFixed(1);
 
-        const FORBIDDEN_WORDS = /(?:KESEHATAN|PENDIDIKAN|MILITER|INDUSTRI|LISTRIK|KAPASITAS|MISI|KEMAJUAN|KEKUATAN|EKONOMI|KOTA|INFRASTRUKTUR|PASAR|BARANG)/i;
+        const FORBIDDEN_WORDS = /(?:SKOR\s+KOTA|KAPASITAS\s+WILAYAH|PETA\s+LANGSUNG|INFRASTRUKTUR)/i;
 
         const isExcluded = el => {
             if (!el) return true;
@@ -495,21 +602,20 @@ export function patchPageVisualEnergy(current, max, force = false) {
             }
         }
 
-        // 1. Dashboard "ENERGI" card ONLY (Strictly isolated, never touching ancestor containers)
+        // 1. Dashboard "ENERGI" card ONLY
         const energyHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
         for (const h of energyHeaders) {
             if (isExcluded(h)) continue;
             const t = (h.textContent || '').trim();
             if (/^⚡?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 15) {
                 let card = h.parentElement;
-                while (card && card !== document.body) {
+                let depth = 0;
+                while (card && card !== document.body && depth < 5) {
                     const cardText = (card.textContent || '').trim();
-                    // STOP if it bleeds into other dashboard cards or widgets!
                     if (FORBIDDEN_WORDS.test(cardText)) break;
 
-                    // The real energy card contains the energy numbers (e.g. 74/115) and has short text (< 120 chars)
-                    if (cardText.includes('/') && /\d+\s*\/\s*\d+/.test(cardText) && cardText.length < 120) {
-                        // Patch only text nodes with \d+/\d+ inside this exact energy card
+                    if (cardText.includes('/') && /\d+\s*\/\s*\d+/.test(cardText)) {
+                        // Patch text nodes in card
                         const innerEls = card.querySelectorAll('*');
                         for (const el of innerEls) {
                             if (isExcluded(el)) continue;
@@ -519,30 +625,26 @@ export function patchPageVisualEnergy(current, max, force = false) {
                             }
                         }
 
-                        // Patch ONLY the progress bar inside this isolated energy card
-                        const bars = card.querySelectorAll('[role="progressbar"], div[style*="width"], span[style*="width"]');
+                        // Patch progress bar width in this container or any child/sibling
+                        const bars = card.querySelectorAll('[role="progressbar"], div[style*="width"], span[style*="width"], [class*="bg-cyan" i], [class*="bg-teal" i], [class*="bg-emerald" i]');
                         for (const bar of bars) {
                             if (isExcluded(bar)) continue;
-                            if (bar.style.width && bar.style.width.includes('%')) {
-                                bar.style.width = `${pct}%`;
-                            }
-                            if (bar.hasAttribute('aria-valuenow')) {
-                                bar.setAttribute('aria-valuenow', String(safeCurrent));
-                            }
-                            if (bar.hasAttribute('aria-valuemax')) {
-                                bar.setAttribute('aria-valuemax', String(safeMax));
-                            }
+                            bar.style.width = `${pct}%`;
+                            if (bar.hasAttribute('aria-valuenow')) bar.setAttribute('aria-valuenow', String(safeCurrent));
+                            if (bar.hasAttribute('aria-valuemax')) bar.setAttribute('aria-valuemax', String(safeMax));
                         }
-                        break; // Stop immediately after patching the isolated energy card
+
+                        if (bars.length > 0) break;
                     }
                     card = card.parentElement;
+                    depth++;
                 }
             }
         }
 
-        // 2. Top Navigation Bar energy pill ONLY (Text only, NEVER touch progress bars)
-        const topCandidates = document.querySelectorAll('header, nav, [role="banner"], [class*="nav" i], [class*="header" i], [class*="topbar" i], [class*="navbar" i]');
-        for (const container of topCandidates) {
+        // 2. Navigation bar energy pills (Top header and bottom bar)
+        const navCandidates = document.querySelectorAll('header, nav, footer, [role="banner"], [class*="nav" i], [class*="header" i], [class*="topbar" i], [class*="navbar" i], [class*="bottom" i]');
+        for (const container of navCandidates) {
             if (isExcluded(container)) continue;
             const els = container.querySelectorAll('*');
             for (const el of els) {
@@ -560,10 +662,19 @@ export function patchPageVisualEnergy(current, max, force = false) {
             if (isExcluded(btn)) continue;
             const btnText = (btn.textContent || '').trim();
             if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(btnText)) {
+                // Update ⚡ number inside button if present
+                const walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
+                let node;
+                while ((node = walker.nextNode())) {
+                    const val = node.nodeValue || '';
+                    if (/⚡?\s*\d+/.test(val)) {
+                        node.nodeValue = val.replace(/(⚡?\s*)(\d+)/, `$1${safeCurrent}`);
+                    }
+                }
                 if (safeCurrent < 10) {
                     btn.style.opacity = '0.55';
                     btn.style.filter = 'grayscale(0.6)';
-                    btn.title = `Energi saat ini ${safeCurrent}/${safeMax}⚡ (butuh minimal 10⚡ untuk giliran kerja)`;
+                    btn.title = `Energi saat ini ${safeCurrent}/${safeMax} EN (butuh minimal 10 EN untuk giliran kerja)`;
                 } else {
                     btn.style.opacity = '1';
                     btn.style.filter = 'none';
@@ -573,5 +684,3 @@ export function patchPageVisualEnergy(current, max, force = false) {
         }
     } catch { /* ignore */ }
 }
-
-

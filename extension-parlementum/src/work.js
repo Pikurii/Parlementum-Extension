@@ -34,18 +34,88 @@ export async function doWork(ctx, manual = false) {
     if (!state.running && !manual) return 'paused';
 
     if (manual) {
-        log('⚡ Menjalankan shift kerja manual...', 'info');
+        log('Menjalankan shift kerja manual...', 'info');
     }
 
+    const energy = getSyncedEnergy(state);
+    if (!energy) {
+        log('Gagal membaca energi dari halaman. Mencoba lagi dalam 5 detik.', 'warn');
+        state.nextWorkTimestamp = Date.now() + 5000;
+        return 'retrySoon';
+    }
+
+    state.currentEnergy = energy.current;
+    state.maxEnergy     = energy.max;
+
+    if (!manual && isSleepTime(CONFIG)) {
+        const msUntilWake = getMsUntilSleepEnd(CONFIG);
+        const wakeHour = String(CONFIG.sleepEndHour ?? 6).padStart(2, '0') + ':00';
+        log(`Jam istirahat aktif (${CONFIG.sleepStartHour ?? 1}:00 - ${CONFIG.sleepEndHour ?? 6}:00 WIB). Auto Worker istirahat sampai pukul ${wakeHour}...`, 'info');
+        state.nextWorkTimestamp = Date.now() + msUntilWake;
+        updatePanel();
+        return 'waiting';
+    }
+
+    if (state.currentEnergy < 10 && manual) {
+        log(`Energi saat ini (${state.currentEnergy}/${state.maxEnergy} EN) belum cukup! Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
+        return 'waiting';
+    }
+
+    if (state.currentEnergy < CONFIG.energyThreshold && !manual) {
+        log(`Energi belum cukup (${state.currentEnergy}/${CONFIG.energyThreshold})`, 'warn');
+        state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
+        return 'waiting';
+    }
+
+    const energyBefore = getCurrentEnergy() || energy;
+
+    // 1. Primary Work Method on Dashboard: Native Page Button Click
+    // Clicking the game's actual button lets React handle animations, XP toast, navbar,
+    // progress bar, and component states natively with zero DOM glitches or virtual DOM desync!
+    const domBtn = _getDomWorkButton();
+    if (domBtn && _isButtonUsable(domBtn)) {
+        state.workTriggeredViaDom = true;
+        state.workInFlight = true;
+        state.workInFlightAt = Date.now();
+
+        const workCompletionPromise = new Promise(resolve => {
+            const onMsg = (event) => {
+                if (event?.data?.source === 'PARLAMENTUM_INTERCEPTOR') {
+                    if (event.data.type === 'WORK_SUCCESS' || event.data.type === 'WORK_REJECTED') {
+                        window.removeEventListener('message', onMsg);
+                        resolve(event.data);
+                    }
+                }
+            };
+            window.addEventListener('message', onMsg);
+            setTimeout(() => {
+                window.removeEventListener('message', onMsg);
+                resolve(null);
+            }, 6000);
+        });
+
+        _triggerDomWorkClick(domBtn);
+        if (manual) {
+            log('Shift kerja manual dikirim via tombol game...', 'info');
+        }
+
+        await workCompletionPromise;
+        state.workInFlight = false;
+        state.workTriggeredViaDom = false;
+        state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
+        updatePanel?.();
+        return 'worked';
+    }
+
+    // 2. Fallback Work Method (off-dashboard or button unavailable): Direct API fetch
+    state.workTriggeredViaDom = false;
     state.workInFlight = true;
     state.workInFlightAt = Date.now();
     let timeoutId = null;
-    let energyBefore = null;
 
     try {
         if (!state.currentToken) {
             getTokenFromStorage(state, (raw, src) => {
-                // Import handleNewToken inline to avoid circular import
                 return ctx.handleNewToken(raw, src);
             });
             if (!state.currentToken) {
@@ -53,38 +123,6 @@ export async function doWork(ctx, manual = false) {
                 return 'retry';
             }
         }
-
-        const energy = getSyncedEnergy(state);
-        if (!energy) {
-            log('Gagal membaca energi dari halaman. Mencoba lagi dalam 5 detik.', 'warn');
-            state.nextWorkTimestamp = Date.now() + 5000;
-            return 'retrySoon';
-        }
-
-        state.currentEnergy = energy.current;
-        state.maxEnergy     = energy.max;
-
-        if (!manual && isSleepTime(CONFIG)) {
-            const msUntilWake = getMsUntilSleepEnd(CONFIG);
-            const wakeHour = String(CONFIG.sleepEndHour ?? 6).padStart(2, '0') + ':00';
-            log(`🌙 Jam istirahat aktif (${CONFIG.sleepStartHour ?? 1}:00 - ${CONFIG.sleepEndHour ?? 6}:00 WIB). Auto Worker tidur sampai pukul ${wakeHour}...`, 'info');
-            state.nextWorkTimestamp = Date.now() + msUntilWake;
-            updatePanel();
-            return 'waiting';
-        }
-
-        if (state.currentEnergy < 10 && manual) {
-            log(`⚠️ Energi saat ini (${state.currentEnergy}/${state.maxEnergy}⚡) belum cukup! Butuh minimal 10⚡ untuk giliran kerja.`, 'warn');
-            return 'waiting';
-        }
-
-        if (state.currentEnergy < CONFIG.energyThreshold && !manual) {
-            log(`Energi belum cukup (${state.currentEnergy}/${CONFIG.energyThreshold})`, 'warn');
-            state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
-            return 'waiting';
-        }
-
-        energyBefore = getCurrentEnergy() || energy;
 
         const controller = new AbortController();
         timeoutId = setTimeout(() => controller.abort(), 15000);
@@ -102,11 +140,19 @@ export async function doWork(ctx, manual = false) {
         });
 
         if (response.ok) {
-            return _handleSuccess(ctx, response, energy);
+            return _handleSuccess(ctx, response, energy, energyBefore);
         } else if (response.status === 401) {
             return _handleUnauthorized(ctx);
         } else if (response.status === 400 || response.status === 422) {
             return _handleRejected(ctx, response);
+        } else if (response.status === 404 || response.status === 405) {
+            const clicked = _clickDomWorkButton();
+            if (clicked) {
+                log('Endpoint API tidak merespon (HTTP 404), mengeksekusi klik tombol kerja di halaman...', 'info');
+                return 'worked';
+            }
+            log(`Error HTTP: ${response.status}`, 'error');
+            return 'retry';
         } else {
             log(`Error HTTP: ${response.status}`, 'error');
             return 'retry';
@@ -117,6 +163,11 @@ export async function doWork(ctx, manual = false) {
             return _handleTimeout(ctx, energyBefore);
         }
         console.error('[doWork] Error:', error);
+        const clicked = _clickDomWorkButton();
+        if (clicked) {
+            log('Mengeksekusi klik tombol kerja di halaman (fallback)...', 'info');
+            return 'worked';
+        }
         log(`Gagal koneksi: ${error.message}`, 'error');
         return 'retry';
     } finally {
@@ -127,7 +178,62 @@ export async function doWork(ctx, manual = false) {
 
 // ─── Private helpers ──────────────────────────────────────────────────────────
 
-async function _handleSuccess(ctx, response, energy) {
+function _getDomWorkButton() {
+    if (typeof document === 'undefined') return null;
+    // Priority 1: Exact data-testid attribute from the game
+    const testIdBtn = document.querySelector('button[data-testid="work"], button[data-tutorial-target="work"]');
+    if (testIdBtn) return testIdBtn;
+
+    // Priority 2: Text matching
+    const buttons = document.querySelectorAll('button');
+    for (const btn of buttons) {
+        const txt = (btn.textContent || '').trim();
+        if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(txt)) {
+            return btn;
+        }
+    }
+    // Priority 3: aria-label / title
+    const candidates = document.querySelectorAll('button, [role="button"]');
+    for (const el of candidates) {
+        const label = (el.getAttribute('aria-label') || el.getAttribute('title') || '').trim();
+        if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(label)) {
+            return el;
+        }
+    }
+    return null;
+}
+
+function _isButtonUsable(btn) {
+    if (!btn) return false;
+    if (btn.disabled) return false;
+    if (btn.getAttribute('aria-disabled') === 'true') return false;
+    if (btn.classList.contains('disabled')) return false;
+    if (btn.style.pointerEvents === 'none') return false;
+    return true;
+}
+
+function _triggerDomWorkClick(btn) {
+    if (!btn) return false;
+    try {
+        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        btn.click();
+        return true;
+    } catch {
+        btn.click();
+        return true;
+    }
+}
+
+function _clickDomWorkButton() {
+    const btn = _getDomWorkButton();
+    if (btn && _isButtonUsable(btn)) {
+        return _triggerDomWorkClick(btn);
+    }
+    return false;
+}
+
+async function _handleSuccess(ctx, response, energy, energyBefore) {
     const { state, CONFIG, workHistory, log, sendNotification, playNotificationSound, updatePanel, wakePendingWork } = ctx;
 
     let data = null;
@@ -155,26 +261,32 @@ async function _handleSuccess(ctx, response, energy) {
             state.energySyncBase = { current: 0, max: state.maxEnergy || 115, updatedAt: Date.now() };
         }
         const waitMs = Math.max(10 * 60000, getNextWorkDelay(state, CONFIG));
-        const waitMins = Math.round(waitMs / 60000);
-        log(`Shift selesai tapi menghasilkan 0 XP (energi game saat ini: ${state.currentEnergy}/${state.maxEnergy}⚡). Menunggu energi pulih...`, 'warn');
+        log(`Shift selesai tapi menghasilkan 0 XP (energi game saat ini: ${state.currentEnergy}/${state.maxEnergy} EN). Menunggu energi pulih...`, 'warn');
         state.nextWorkTimestamp = Date.now() + waitMs;
         updatePanel();
         return 'waiting';
     }
 
-    const available = Math.floor(state.currentEnergy / 10) * 10;
-    const fallbackBlocks = Math.floor(available / 10);
+    const startingEnergy = (energyBefore && typeof energyBefore.current === 'number')
+        ? energyBefore.current
+        : ((energy && typeof energy.current === 'number') ? energy.current : (state.currentEnergy || 0));
+
+    const available = Math.floor(startingEnergy / 10) * 10;
+    const energySpent = hasReportedEnergy
+        ? parsedEnergyUsed
+        : (available > 0 ? available : 10);
+
+    const calculatedXp = Math.max(4, Math.floor(energySpent / 10) * 4);
     const xpGained = Number.isSafeInteger(parsedXp) && parsedXp > 0
         ? parsedXp
-        : (hasReportedEnergy ? Math.floor(parsedEnergyUsed / 10) * 4 : fallbackBlocks * 4);
+        : calculatedXp;
+    const units = Number(data?.workerUnits) || Number(data?.produced) || 0;
 
     if (xpGained <= 0) {
-        log(`Shift tidak menghasilkan XP. Energi saat ini: ${state.currentEnergy}/${state.maxEnergy}⚡.`, 'warn');
+        log(`Shift tidak menghasilkan XP. Energi saat ini: ${state.currentEnergy}/${state.maxEnergy} EN.`, 'warn');
         updatePanel();
         return 'waiting';
     }
-
-    const energySpent  = hasReportedEnergy ? parsedEnergyUsed : Math.max(10, available);
 
     // Update counters
     state.totalWorked++;
@@ -203,8 +315,12 @@ async function _handleSuccess(ctx, response, energy) {
     saveWorkHistory(history);
     if (ctx) ctx.workHistory = history;
 
-    // Optimistic energy update (prevents race conditions)
-    state.currentEnergy = Math.max(0, state.currentEnergy - energySpent);
+    // Optimistic energy update based on startingEnergy (never double subtract!)
+    if (data?.energy != null && typeof data.energy === 'number') {
+        state.currentEnergy = Math.max(0, Math.round(data.energy));
+    } else {
+        state.currentEnergy = Math.max(0, startingEnergy - energySpent);
+    }
     state.energySyncBase = { current: state.currentEnergy, max: state.maxEnergy, updatedAt: Date.now() };
     state.lastWorkTimestamp = Date.now();
     state.domEnergyStale = true;
@@ -217,10 +333,23 @@ async function _handleSuccess(ctx, response, energy) {
         window.dispatchEvent(new Event('focus'));
     } catch { /* ignore */ }
 
+    // Fresh re-read of ground-truth page energy after UI updates
+    setTimeout(() => {
+        const fresh = getCurrentEnergy();
+        if (fresh) {
+            state.currentEnergy = fresh.current;
+            state.maxEnergy = fresh.max;
+            state.energySyncBase = { current: fresh.current, max: fresh.max, updatedAt: Date.now() };
+            state.domEnergyStale = false;
+            updatePanel?.();
+        }
+    }, 600);
+
     saveState(state);
-    log(`Kerja sukses! +${xpGained} XP | Sisa: ${state.currentEnergy}/${state.maxEnergy}⚡`, 'success');
+    const unitsPart = units > 0 ? ` | +${units} unit` : '';
+    log(`Kerja sukses! +${xpGained} XP${unitsPart} | Sisa: ${state.currentEnergy}/${state.maxEnergy} EN`, 'success');
     playNotificationSound(CONFIG, 'success');
-    sendNotification(CONFIG, 'Parlamentum', `Kerja sukses! +${xpGained} XP`);
+    sendNotification(CONFIG, 'Parlamentum', `Kerja sukses! +${xpGained} XP${unitsPart}`);
     state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
     updatePanel();
     wakePendingWork?.();
@@ -229,7 +358,7 @@ async function _handleSuccess(ctx, response, energy) {
 
 function _handleUnauthorized(ctx) {
     const { state, CONFIG, log, setRunningUI, sendNotification, playNotificationSound, updatePanel } = ctx;
-    log('🔄 Sesi token kedaluwarsa (401). Me-reload tab game dalam 2 detik untuk memperbarui token via session cookie...', 'warn');
+    log('Sesi token kedaluwarsa (401). Me-reload tab game dalam 2 detik untuk memperbarui token...', 'warn');
     state.pausedForToken = true;
     setTimeout(() => {
         window.location.reload();
@@ -257,7 +386,7 @@ async function _handleRejected(ctx, response) {
     const combined = `${errorText} ${serverMessage}`;
 
     if (/wallet|wage/i.test(combined)) {
-        log('❌ Majikan Kehabisan Saldo! Kas perusahaan tidak cukup untuk membayar upah. Script di-pause.', 'error');
+        log('Majikan Kehabisan Saldo! Kas perusahaan tidak cukup untuk membayar upah. Script dijeda.', 'error');
         state.running = false;
         setRunningUI(false);
         sendNotification(CONFIG, 'Parlamentum', 'Kas majikan habis! Pindah lowongan di Job Board.');
@@ -265,7 +394,7 @@ async function _handleRejected(ctx, response) {
     }
 
     if (/region|wilayah|transit|travel|penerbangan/i.test(combined)) {
-        log(`⚠️ ${serverMessage || 'Anda harus berada di wilayah perusahaan untuk bekerja (sedang dalam perjalanan)'}. Menunggu 3 menit...`, 'warn');
+        log(`${serverMessage || 'Anda harus berada di wilayah perusahaan untuk bekerja (sedang dalam perjalanan)'}. Menunggu 3 menit...`, 'warn');
         state.nextWorkTimestamp = Date.now() + 3 * 60000;
         updatePanel();
         return 'waiting';
@@ -280,7 +409,7 @@ async function _handleRejected(ctx, response) {
         const rate = state.regenRate || 1.0;
         const waitMs = Math.max(60000, Math.round((needed / rate) * 60000));
         const waitMins = Math.round(waitMs / 60000);
-        log(`Server menolak kerja (HTTP ${response.status}): ${serverMessage || 'Energi di server belum cukup'}. Menunggu target ${CONFIG.energyThreshold}⚡ (~${waitMins} mnt)...`, 'warn');
+        log(`Server menolak kerja (HTTP ${response.status}): ${serverMessage || 'Energi di server belum cukup'}. Menunggu target ${CONFIG.energyThreshold} EN (~${waitMins} mnt)...`, 'warn');
         state.nextWorkTimestamp = Date.now() + waitMs;
         saveState(state);
         saveLiveStatus(state, CONFIG, true);

@@ -6,7 +6,7 @@
  * All logic is identical — only imports replace global variable references.
  */
 
-import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, patchPageVisualEnergy } from '../energy.js';
+import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, patchPageVisualEnergy, getGameEnergyFullText } from '../energy.js';
 import { getTimeUntilExpiry } from '../token.js';
 import { getValue, setValue } from '../storage.js';
 import { saveState, saveLiveStatus } from '../state.js';
@@ -262,8 +262,12 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
             if (reg.bonusPercent !== state.regionHealthBonusPercent) {
                 state.regionHealthBonusPercent = reg.bonusPercent;
             }
-            if (reg.bonusMultiplier && reg.bonusMultiplier !== state.regenRate) {
+            if (reg.bonusMultiplier && Math.abs(reg.bonusMultiplier - (state.regenRate || 1.0)) > 0.01) {
                 state.regenRate = reg.bonusMultiplier;
+                if (state.currentEnergy < CONFIG.energyThreshold) {
+                    const neededMs = Math.max(1, (CONFIG.energyThreshold - state.currentEnergy) / state.regenRate) * 60000;
+                    state.nextWorkTimestamp = Date.now() + neededMs;
+                }
             }
             _patchEl('aw-region-name', el => el.textContent = state.regionName || 'Wilayah');
             _patchEl('aw-region-buff', el => {
@@ -315,11 +319,11 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     // Pill live updates
     _patchEl('aw-pill-energy', el => el.textContent = `${state.currentEnergy}/${state.maxEnergy}`);
     _patchEl('aw-pill-countdown', el => {
-        el.textContent = isReadyToWork ? 'Siap!' : liveCountdown;
+        el.textContent = isReadyToWork ? 'Siap' : liveCountdown;
         el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
     });
     _patchEl('aw-pill-countdown-icon', el => {
-        el.textContent = isReadyToWork ? '⚡' : '⏳';
+        el.innerHTML = isReadyToWork ? ICONS.zap : ICONS.clock;
     });
     _patchEl('aw-pill-status-dot', el => {
         const dotColor = state.workResultUncertain ? '#ffaa00' : (state.running ? '#00ff88' : '#ff4757');
@@ -328,15 +332,15 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     });
     _patchEl('aw-pill-container', el => {
         const statusText = state.workResultUncertain
-            ? '⚠️ Hasil kerja belum pasti!'
-            : (state.running ? 'Sedang Berjalan' : 'Di-pause');
-        el.title = `Auto Worker: ${statusText}\n⚡ Energi: ${state.currentEnergy}/${state.maxEnergy}\n⏳ Giliran: ${liveCountdown}\n📊 Hari ini: ${state.workToday}x (+${state.totalWorkXP} XP)\n\n(Seret untuk geser posisi • Klik 2x untuk perbesar)`;
+            ? 'Hasil kerja belum pasti'
+            : (state.running ? 'Sedang Berjalan' : 'Dijeda');
+        el.title = `Auto Worker: ${statusText}\nEnergi: ${state.currentEnergy}/${state.maxEnergy}\nGiliran: ${liveCountdown}\n\n(Seret untuk geser • Klik 2x untuk perbesar)`;
     });
 
     // Clock time tooltips (Hover to see exact time)
     _patchEl('aw-next-wrap', el => {
         if (isReadyToWork) {
-            el.title = '⚡ Energi sudah mencapai target! Siap bekerja.';
+            el.title = 'Energi sudah mencapai target. Siap bekerja.';
         } else if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
             const d = new Date(state.nextWorkTimestamp);
             const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
@@ -349,19 +353,33 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     _patchEl('aw-full-wrap', el => {
         const needed = (state.maxEnergy || 115) - (state.currentEnergy || 0);
         if (needed <= 0) {
-            el.title = '⚡ Energi sudah 100% penuh!';
+            el.title = 'Energi sudah 100% penuh.';
         } else {
             const rate = state.regenRate || 1.0;
             const fullMs = Math.round((needed / rate) * 60000);
             const d = new Date(Date.now() + fullMs);
             const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
-            el.title = `Estimasi energi 100% penuh: pk. ${timeStr} WIB`;
+            const gameText = getGameEnergyFullText();
+            const gameNote = gameText ? ` | Sesuai game: Penuh dalam ${gameText}` : '';
+            el.title = `Estimasi energi 100% penuh: pk. ${timeStr} WIB (~${Math.round(needed / rate)} mnt @ ${rate} EN/mnt)${gameNote}`;
         }
     });
 
-    _patchEl('aw-today',         el => el.textContent  = `${state.workToday}x`);
-    _patchEl('aw-worked',        el => el.textContent  = `${state.totalWorked}x`);
-    _patchEl('aw-xp',            el => el.textContent  = `+${state.totalWorkXP} XP`);
+    _patchEl('aw-mode-title', el => {
+        el.textContent = state.running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA';
+        el.style.color = state.running ? '#00ff88' : '#ff7777';
+    });
+    _patchEl('aw-mode-icon', el => {
+        el.innerHTML = state.running ? ICONS.zap : ICONS.pause;
+        el.style.color = state.running ? '#00ff88' : '#ff7777';
+    });
+    _patchEl('aw-target-threshold', el => {
+        el.textContent = String(CONFIG.energyThreshold || 10);
+    });
+    _patchEl('aw-shift-countdown', el => {
+        el.textContent = isReadyToWork ? 'Siap Kerja' : liveCountdown;
+        el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
+    });
     _patchEl('aw-token-status',  el => {
         const isExpired = Boolean(
             state.tokenExpired ||
@@ -400,7 +418,9 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
 /** Updates only the running indicator buttons — called from doWork on pause/resume. */
 export function setRunningUI(running) {
     _patchEl('aw-toggle', el => {
-        el.textContent = running ? '⏸ Pause' : '▶ Resume';
+        el.innerHTML = running
+            ? `<span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.pause} Jeda</span>`
+            : `<span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.play} Lanjut</span>`;
         el.style.background = running
             ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
             : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
@@ -411,8 +431,8 @@ export function setRunningUI(running) {
         el.style.boxShadow  = `0 0 8px ${running ? '#00ff88' : '#ff4757'}`;
     });
     _patchEl('aw-pill-toggle', el => {
-        el.textContent = running ? '⏸' : '▶';
-        el.title = running ? 'Pause Worker' : 'Resume Worker';
+        el.innerHTML = running ? ICONS.pause : ICONS.play;
+        el.title = running ? 'Jeda Worker' : 'Lanjutkan Worker';
         el.style.background = running
             ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
             : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
@@ -517,15 +537,15 @@ function _buildPanelHTML(state, CONFIG) {
         <div id="aw-full-container" style="display: ${isMin ? 'none' : 'block'}; width: 100%;">
             <div id="aw-header" style="
                 background: linear-gradient(135deg, rgba(26, 32, 53, 0.98) 0%, rgba(18, 22, 34, 0.98) 100%);
-                padding: 9px 12px; cursor: ${isPinned ? 'default' : 'move'};
+                padding: 10px 12px; cursor: ${isPinned ? 'default' : 'move'};
                 border-bottom: 1px solid rgba(255, 255, 255, 0.08);
                 display: flex; justify-content: space-between; align-items: center;
                 border-radius: 12px 12px 0 0;
                 gap: 8px; box-sizing: border-box; width: 100%;
             ">
-                <div style="display:flex;align-items:center;gap:6px;flex-shrink:0;min-width:0;">
-                    <span style="color:#00d9ff;display:flex;align-items:center;flex-shrink:0;">${ICONS.robot}</span>
-                    <span style="font-weight:700;color:#fff;font-size:12.5px;letter-spacing:0.2px;white-space:nowrap;">Auto Worker</span>
+                <div style="display:flex;align-items:center;gap:7px;flex-shrink:0;min-width:0;">
+                    <span style="color:#38bdf8;display:flex;align-items:center;flex-shrink:0;">${ICONS.robot}</span>
+                    <span style="font-weight:700;color:#fff;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;">Auto Worker</span>
                     <span id="aw-status-dot" style="
                         width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;
                         background:${running ? '#00ff88' : '#ff4757'};
@@ -535,14 +555,15 @@ function _buildPanelHTML(state, CONFIG) {
                 <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
                     <button id="aw-minimize"  class="aw-header-btn" title="Mode Ringkas (Pill)" style="${HEADER_BTN_STYLE}">${ICONS.minimize}</button>
                     <button id="aw-pin"       class="aw-header-btn" title="${isPinned ? 'Unpin' : 'Pin'}" style="${HEADER_BTN_STYLE} background:${isPinned ? 'rgba(0, 136, 255, 0.2)' : 'transparent'};color:${isPinned ? '#00d9ff' : '#8892b0'};border:${isPinned ? '1px solid rgba(0, 136, 255, 0.4)' : 'none'};">${isPinned ? ICONS.lockClosed : ICONS.lockOpen}</button>
-                    <button id="aw-analytics" class="aw-header-btn" title="Statistik & Riwayat" style="${HEADER_BTN_STYLE}">${ICONS.chart}</button>
                     <button id="aw-settings"  class="aw-header-btn" title="Pengaturan" style="${HEADER_BTN_STYLE}">${ICONS.settings}</button>
                     <button id="aw-hide"      class="aw-header-btn" title="Sembunyikan (${CONFIG.shortcuts.showHide.display})" style="${HEADER_BTN_STYLE}color:#ff5252;margin-left:2px;">${ICONS.close}</button>
                 </div>
             </div>
             <div id="aw-body" style="padding: 12px; display: block;">
                 <div id="aw-uncertain-banner" style="display:${state.workResultUncertain ? 'block' : 'none'};margin-bottom:10px;padding:9px;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.55);border-radius:6px;color:#ffb3b3;font-size:11px;line-height:1.4;">
-                    <div style="font-weight:700;color:#ff7777;margin-bottom:4px;">Hasil kerja terakhir belum pasti</div>
+                    <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#ff7777;margin-bottom:4px;">
+                        <span style="display:flex;align-items:center;">${ICONS.alert}</span> Hasil kerja belum pasti
+                    </div>
                     <div>Periksa halaman game sebelum melanjutkan.</div>
                     <div id="aw-reconciliation-status" style="margin-top:4px;color:#ffd166;">Status rekonsiliasi: menunggu pembacaan energi.</div>
                     <button id="aw-confirm-uncertain" style="margin-top:7px;padding:5px 8px;background:#8f3030;color:#fff;border:1px solid #b44;border-radius:4px;cursor:pointer;font-size:10px;">Saya sudah memeriksa, lanjutkan</button>
@@ -551,22 +572,22 @@ function _buildPanelHTML(state, CONFIG) {
                 <!-- Region & Buff Badge -->
                 <div id="aw-region-badge" style="
                     display: flex; align-items: center; justify-content: space-between;
-                    background: linear-gradient(135deg, rgba(0, 217, 255, 0.08) 0%, rgba(0, 255, 136, 0.05) 100%);
-                    border: 1px solid rgba(0, 217, 255, 0.2);
+                    background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%);
+                    border: 1px solid rgba(56, 189, 248, 0.2);
                     border-radius: 8px;
-                    padding: 5px 9px;
+                    padding: 6px 10px;
                     margin-bottom: 9px;
                     font-size: 11px;
                 ">
-                    <div style="display:flex;align-items:center;gap:5px;overflow:hidden;">
-                        <span style="font-size:12px;">📍</span>
-                        <span id="aw-region-name" style="font-weight:600;color:#e6edf3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">${state.regionName || 'Memuat wilayah...'}</span>
+                    <div style="display:flex;align-items:center;gap:6px;overflow:hidden;">
+                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.mapPin}</span>
+                        <span id="aw-region-name" style="font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">${state.regionName || 'Memuat wilayah...'}</span>
                     </div>
                     <span id="aw-region-buff" style="
-                        background: rgba(0, 255, 136, 0.12);
-                        color: #00ff88;
-                        border: 1px solid rgba(0, 255, 136, 0.25);
-                        padding: 1px 6px;
+                        background: rgba(16, 185, 129, 0.14);
+                        color: #10b981;
+                        border: 1px solid rgba(16, 185, 129, 0.3);
+                        padding: 1px 7px;
                         border-radius: 4px;
                         font-weight: 700;
                         font-size: 9.5px;
@@ -575,41 +596,42 @@ function _buildPanelHTML(state, CONFIG) {
                 </div>
 
                 <!-- Energy Card -->
-                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);padding:9px 11px;border-radius:9px;margin-bottom:9px;">
-                    <div style="display:flex;justify-content:space-between;margin-bottom:6px;font-size:11px;">
-                        <span style="color:#a0aec0;font-weight:600;">⚡ Energi</span>
-                        <span id="aw-energy-text" style="color:#00ff88;font-weight:700;letter-spacing:0.3px;">${state.currentEnergy}/${state.maxEnergy}</span>
+                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);padding:10px 12px;border-radius:9px;margin-bottom:9px;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px;">
+                        <span style="display:flex;align-items:center;gap:5px;color:#94a3b8;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
+                            <span style="color:#00ff88;display:flex;align-items:center;">${ICONS.zap}</span> Energi
+                        </span>
+                        <span id="aw-energy-text" style="color:#00ff88;font-weight:700;letter-spacing:0.3px;font-family:ui-monospace,Menlo,monospace;">${state.currentEnergy}/${state.maxEnergy}</span>
                     </div>
                     <div style="background:rgba(0,0,0,0.5);height:7px;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,0.07);padding:1px;">
-                        <div id="aw-energy-bar" style="height:100%;width:${(state.currentEnergy / state.maxEnergy) * 100}%;background:linear-gradient(90deg, #00d9ff, #00ff88);border-radius:999px;transition:width 0.3s ease;box-shadow:0 0 8px rgba(0,255,136,0.35);"></div>
+                        <div id="aw-energy-bar" style="height:100%;width:${(state.currentEnergy / state.maxEnergy) * 100}%;background:linear-gradient(90deg, #38bdf8, #10b981);border-radius:999px;transition:width 0.3s ease;box-shadow:0 0 8px rgba(0,255,136,0.35);"></div>
                     </div>
                     <div style="display:flex;justify-content:space-between;font-size:10px;color:#718096;margin-top:6px;">
-                        <span id="aw-next-wrap" style="cursor:help;">Next: <span id="aw-next-work" style="color:#00ff88;font-weight:600;">Now!</span></span>
-                        <span id="aw-full-wrap" style="cursor:help;">Full: <span id="aw-full-energy" style="color:#00d9ff;font-weight:500;">${getTimeToFullEnergy(state)}</span></span>
+                        <span id="aw-next-wrap" style="cursor:help;">Next: <span id="aw-next-work" style="color:#00ff88;font-weight:600;">Now</span></span>
+                        <span id="aw-full-wrap" style="cursor:help;">Full: <span id="aw-full-energy" style="color:#38bdf8;font-weight:500;">${getTimeToFullEnergy(state)}</span></span>
                     </div>
                 </div>
 
-                <!-- Stats 3-Col Grid -->
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:9px;">
-                    <div style="background:rgba(255,255,255,0.03);padding:7px 5px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);text-align:center;">
-                        <div style="font-size:9px;color:#718096;margin-bottom:2px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Hari Ini</div>
-                        <div id="aw-today" style="font-size:13.5px;font-weight:700;color:#00d9ff;">${state.workToday}x</div>
+                <!-- Focused Auto Work Status Section -->
+                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;margin-bottom:9px;display:flex;align-items:center;justify-content:space-between;font-size:11px;">
+                    <div style="display:flex;align-items:center;gap:7px;">
+                        <span id="aw-mode-icon" style="color:${running ? '#00ff88' : '#ff7777'};display:flex;align-items:center;">${running ? ICONS.zap : ICONS.pause}</span>
+                        <div>
+                            <div id="aw-mode-title" style="font-weight:700;color:${running ? '#00ff88' : '#ff7777'};font-size:11px;">${running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA'}</div>
+                            <div style="font-size:9.5px;color:#718096;">Target: ≥ <span id="aw-target-threshold">${CONFIG.energyThreshold || 10}</span> EN</div>
+                        </div>
                     </div>
-                    <div style="background:rgba(255,255,255,0.03);padding:7px 5px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);text-align:center;">
-                        <div style="font-size:9px;color:#718096;margin-bottom:2px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Total Shift</div>
-                        <div id="aw-worked" style="font-size:13.5px;font-weight:700;color:#f7fafc;">${state.totalWorked}x</div>
-                    </div>
-                    <div style="background:rgba(255,255,255,0.03);padding:7px 5px;border-radius:8px;border:1px solid rgba(255,255,255,0.06);text-align:center;">
-                        <div style="font-size:9px;color:#718096;margin-bottom:2px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;">Work XP</div>
-                        <div id="aw-xp" style="font-size:13.5px;font-weight:700;color:#00ff88;">+${state.totalWorkXP} XP</div>
+                    <div style="text-align:right;">
+                        <div id="aw-shift-countdown" style="font-weight:700;color:#38bdf8;font-size:11px;">${getLiveCountdown(state, CONFIG)}</div>
+                        <div style="font-size:9px;color:#718096;">Countdown</div>
                     </div>
                 </div>
 
                 <!-- Token & Expiry Row -->
                 <div style="font-size:10.5px;color:#718096;margin-bottom:9px;padding:6px 9px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
-                    <div style="display:flex;align-items:center;gap:5px;">
-                        <span>🔑</span>
-                        <span style="color:#a0aec0;">Token:</span>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.shield}</span>
+                        <span style="color:#a0aec0;">Sesi Auth:</span>
                         <span id="aw-token-status" style="font-weight:700;color:#00ff88;">VALID</span>
                     </div>
                     <span id="aw-token-expiry" style="font-size:10px;color:#718096;">N/A</span>
@@ -618,24 +640,24 @@ function _buildPanelHTML(state, CONFIG) {
                 <!-- Action Buttons -->
                 <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
                     <button id="aw-work-now" class="aw-btn-action" style="
-                        background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+                        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
                         color: #fff; border: 1px solid rgba(255,255,255,0.15);
                         padding: 8px 0; border-radius: 7px; cursor: pointer;
-                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(245,158,11,0.25);
-                    ">⚡ Work</button>
+                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(2,132,199,0.25);
+                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.zap} Kerja</span></button>
                     <button id="aw-toggle" class="aw-btn-action" style="
                         background: ${running ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
                         color: #fff; border: 1px solid rgba(255,255,255,0.15);
                         padding: 8px 0; border-radius: 7px; cursor: pointer;
                         font-weight: 600; font-size: 11px;
                         box-shadow: 0 2px 6px ${running ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'};
-                    ">${running ? '⏸ Pause' : '▶ Resume'}</button>
+                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${running ? ICONS.pause + ' Jeda' : ICONS.play + ' Lanjut'}</span></button>
                     <button id="aw-logs" class="aw-btn-action" style="
-                        background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+                        background: linear-gradient(135deg, #475569 0%, #334155 100%);
                         color: #fff; border: 1px solid rgba(255,255,255,0.15);
                         padding: 8px 0; border-radius: 7px; cursor: pointer;
-                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(99,102,241,0.25);
-                    ">📋 Log</button>
+                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(71,85,105,0.25);
+                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.fileText} Log</span></button>
                 </div>
             </div>
         </div>
@@ -660,7 +682,7 @@ function _buildPanelHTML(state, CONFIG) {
 
             <!-- Robot Icon & Live Status Dot -->
             <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
-                <span style="color: #00d9ff; display: flex; align-items: center;">${ICONS.robot}</span>
+                <span style="color: #38bdf8; display: flex; align-items: center;">${ICONS.robot}</span>
                 <span id="aw-pill-status-dot" style="
                     width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
                     background: ${running ? '#00ff88' : '#ff4757'};
@@ -681,24 +703,24 @@ function _buildPanelHTML(state, CONFIG) {
                 letter-spacing: 0.2px;
                 flex-shrink: 0;
             " title="Energi Saat Ini">
-                <span style="font-size: 11px;">⚡</span>
+                <span style="display: flex; align-items: center;">${ICONS.zap}</span>
                 <span id="aw-pill-energy">${state.currentEnergy || 0}/${state.maxEnergy || 110}</span>
             </div>
 
             <!-- Next Work / Countdown Badge -->
             <div id="aw-pill-countdown-badge" style="
                 display: flex; align-items: center; gap: 4px;
-                background: rgba(0, 217, 255, 0.08);
-                border: 1px solid rgba(0, 217, 255, 0.22);
+                background: rgba(56, 189, 248, 0.08);
+                border: 1px solid rgba(56, 189, 248, 0.22);
                 border-radius: 6px;
                 padding: 2px 7px;
                 font-size: 11px;
                 font-weight: 700;
-                color: #00d9ff;
+                color: #38bdf8;
                 letter-spacing: 0.2px;
                 flex-shrink: 0;
             " title="Countdown Giliran Kerja">
-                <span id="aw-pill-countdown-icon" style="font-size: 11px;">⏳</span>
+                <span id="aw-pill-countdown-icon" style="display: flex; align-items: center;">${ICONS.clock}</span>
                 <span id="aw-pill-countdown">Memuat...</span>
             </div>
 
@@ -712,7 +734,7 @@ function _buildPanelHTML(state, CONFIG) {
                     background: ${running ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
                     color: #fff; font-size: 9.5px; font-weight: 700;
                     box-shadow: 0 2px 6px ${running ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.35)'};
-                " title="${running ? 'Pause Worker' : 'Resume Worker'}">${running ? '⏸' : '▶'}</button>
+                " title="${running ? 'Jeda Worker' : 'Lanjutkan Worker'}">${running ? ICONS.pause : ICONS.play}</button>
 
                 <button id="aw-pill-expand" class="aw-pill-btn" style="
                     width: 22px; height: 22px; border-radius: 50%;
@@ -760,7 +782,7 @@ function _setupDragAndDrop(panel, state, CONFIG) {
 }
 
 function _setupPanelControls(panel, state, CONFIG, ctx) {
-    const { openSettings, openAnalytics, openLogViewer, doWork } = ctx;
+    const { openSettings, openLogViewer, doWork } = ctx;
 
     const minimizeBtn   = document.getElementById('aw-minimize');
     const pinBtn        = document.getElementById('aw-pin');
@@ -768,7 +790,6 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
     const toggleBtn     = document.getElementById('aw-toggle');
     const workNowBtn    = document.getElementById('aw-work-now');
     const logsBtn       = document.getElementById('aw-logs');
-    const analyticsBtn  = document.getElementById('aw-analytics');
     const settingsBtn   = document.getElementById('aw-settings');
     const confirmBtn    = document.getElementById('aw-confirm-uncertain');
     const pillExpandBtn = document.getElementById('aw-pill-expand');
@@ -860,7 +881,6 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
     pillToggleBtn?.addEventListener('click', toggleRunningState);
 
     settingsBtn?.addEventListener('click', () => ctx.openSettings?.());
-    analyticsBtn?.addEventListener('click', () => ctx.openAnalytics?.());
     hideBtn?.addEventListener('click', () => togglePanelVisibility(state, CONFIG));
 
     toggleBtn?.addEventListener('click', toggleRunningState);

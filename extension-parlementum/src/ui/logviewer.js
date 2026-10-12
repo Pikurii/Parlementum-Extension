@@ -5,6 +5,7 @@
  */
 
 import { clearStoredLogs } from '../logger.js';
+import { ICONS } from './icons.js';
 
 // Inject scoped stylesheet once
 function ensureLogViewerStyles() {
@@ -217,13 +218,13 @@ export function createLogViewer(state, CONFIG) {
                 <div style="display: flex; align-items: center; gap: 10px;">
                     <div style="
                         width: 32px; height: 32px; border-radius: 8px;
-                        background: linear-gradient(135deg, rgba(0,212,255,0.2), rgba(0,102,255,0.2));
-                        border: 1px solid rgba(0,212,255,0.3);
+                        background: linear-gradient(135deg, rgba(56, 189, 248, 0.15), rgba(2, 132, 199, 0.2));
+                        border: 1px solid rgba(56, 189, 248, 0.3);
                         display: flex; align-items: center; justify-content: center;
-                        font-size: 16px;
-                    ">📋</div>
+                        color: #38bdf8;
+                    ">${ICONS.fileText}</div>
                     <div>
-                        <div style="font-weight: 700; color: #fff; font-size: 15px; letter-spacing: 0.3px;">Activity Log</div>
+                        <div style="font-weight: 700; color: #fff; font-size: 14.5px; letter-spacing: 0.3px;">Activity Log</div>
                         <div style="font-size: 11px; color: #8b9bb4;">Riwayat aktivitas & status kerja bot secara real-time</div>
                     </div>
                 </div>
@@ -232,17 +233,19 @@ export function createLogViewer(state, CONFIG) {
                         background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12);
                         padding: 6px 12px; border-radius: 8px; cursor: pointer;
                         font-size: 11.5px; font-weight: 600; transition: all 0.15s;
-                    ">📋 Salin Log</button>
+                        display: inline-flex; align-items: center; gap: 5px;
+                    "><span style="display:flex;align-items:center;">${ICONS.copy}</span> Salin Log</button>
                     <button id="aw-clear-log" style="
                         background: rgba(255, 255, 255, 0.05); color: #ff6b6b; border: 1px solid rgba(255, 107, 107, 0.25);
                         padding: 6px 12px; border-radius: 8px; cursor: pointer;
                         font-size: 11.5px; font-weight: 600; transition: all 0.15s;
-                    ">🗑️ Bersihkan</button>
+                        display: inline-flex; align-items: center; gap: 5px;
+                    "><span style="display:flex;align-items:center;">${ICONS.trash}</span> Bersihkan</button>
                     <button id="aw-close-log" style="
                         background: rgba(255, 255, 255, 0.05); color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12);
                         padding: 6px 12px; border-radius: 8px; cursor: pointer;
                         font-size: 12px; font-weight: 600; transition: all 0.15s;
-                    ">✕ Tutup</button>
+                    ">Tutup</button>
                 </div>
             </div>
 
@@ -262,16 +265,16 @@ export function createLogViewer(state, CONFIG) {
                         Semua <span class="aw-log-filter-count" id="aw-count-all">0</span>
                     </button>
                     <button type="button" class="aw-log-filter-pill" data-type="success">
-                        ✅ Sukses <span class="aw-log-filter-count" id="aw-count-success">0</span>
+                        <span style="width:6px;height:6px;border-radius:50%;background:#00ff88;display:inline-block;"></span> Sukses <span class="aw-log-filter-count" id="aw-count-success">0</span>
                     </button>
                     <button type="button" class="aw-log-filter-pill" data-type="warn">
-                        ⚠️ Peringatan <span class="aw-log-filter-count" id="aw-count-warn">0</span>
+                        <span style="width:6px;height:6px;border-radius:50%;background:#ffd166;display:inline-block;"></span> Peringatan <span class="aw-log-filter-count" id="aw-count-warn">0</span>
                     </button>
                     <button type="button" class="aw-log-filter-pill" data-type="error">
-                        ❌ Error <span class="aw-log-filter-count" id="aw-count-error">0</span>
+                        <span style="width:6px;height:6px;border-radius:50%;background:#ff6b6b;display:inline-block;"></span> Error <span class="aw-log-filter-count" id="aw-count-error">0</span>
                     </button>
                     <button type="button" class="aw-log-filter-pill" data-type="info">
-                        ℹ️ Info <span class="aw-log-filter-count" id="aw-count-info">0</span>
+                        <span style="width:6px;height:6px;border-radius:50%;background:#38bdf8;display:inline-block;"></span> Info <span class="aw-log-filter-count" id="aw-count-info">0</span>
                     </button>
                 </div>
 
@@ -286,8 +289,8 @@ export function createLogViewer(state, CONFIG) {
 
                 <!-- Search Input -->
                 <div style="flex: 1; min-width: 170px; position: relative; display: flex; align-items: center;">
-                    <span style="position: absolute; left: 10px; font-size: 12px; color: #64748b; pointer-events: none;">🔍</span>
-                    <input id="aw-log-filter-text" type="text" placeholder="Cari log (shift, energi, buff)..." style="
+                    <span style="position: absolute; left: 10px; color: #64748b; pointer-events: none; display: flex; align-items: center;">${ICONS.search}</span>
+                    <input id="aw-log-filter-text" type="text" placeholder="Cari aktivitas (shift, energi, buff)..." style="
                         width: 100%; box-sizing: border-box;
                         background: #141826; color: #fff;
                         border: 1px solid #28334e; border-radius: 8px;
@@ -326,7 +329,7 @@ export function createLogViewer(state, CONFIG) {
                         background: rgba(255, 255, 255, 0.05); color: #94a3b8; border: 1px solid rgba(255, 255, 255, 0.1);
                         padding: 5px 12px; border-radius: 6px; cursor: pointer;
                         font-size: 11px; font-weight: 500; transition: all 0.15s;
-                    ">💾 Ekspor .txt</button>
+                    ">Ekspor .txt</button>
                     <button id="aw-close-log-footer" style="
                         background: transparent; color: #cbd5e1; border: 1px solid rgba(255, 255, 255, 0.12);
                         padding: 5px 14px; border-radius: 6px; cursor: pointer;
@@ -386,12 +389,10 @@ export function createLogViewer(state, CONFIG) {
         navigator.clipboard.writeText(textToCopy).then(() => {
             const btn = document.getElementById('aw-copy-all-log');
             if (btn) {
-                const orig = btn.textContent;
-                btn.textContent = '✅ Tersalin!';
-                btn.style.color = '#00ff88';
+                const orig = btn.innerHTML;
+                btn.innerHTML = `<span style="display:inline-flex;align-items:center;gap:4px;color:#00ff88;">${ICONS.check} Tersalin</span>`;
                 setTimeout(() => {
-                    btn.textContent = orig;
-                    btn.style.color = '#cbd5e1';
+                    btn.innerHTML = orig;
                 }, 1500);
             }
         }).catch(() => {});
@@ -479,19 +480,19 @@ function renderLogs(state, filterType, filterText) {
     if (filtered.length === 0) {
         container.innerHTML = `
             <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; color: #64748b; padding: 40px 20px; text-align: center;">
-                <span style="font-size: 34px; margin-bottom: 10px; opacity: 0.7;">📋</span>
-                <span style="font-size: 14px; font-weight: 600; color: #94a3b8; margin-bottom: 4px;">Tidak ada riwayat aktivitas</span>
-                <span style="font-size: 12px; color: #64748b;">${countAll === 0 ? 'Belum ada aktivitas yang dicatat.' : 'Tidak ada log yang cocok dengan filter atau kata kunci pencarian.'}</span>
+                <span style="color: #475569; margin-bottom: 12px; display: flex; transform: scale(1.6);">${ICONS.fileText}</span>
+                <span style="font-size: 13.5px; font-weight: 600; color: #94a3b8; margin-bottom: 4px;">Tidak ada riwayat aktivitas</span>
+                <span style="font-size: 11.5px; color: #64748b;">${countAll === 0 ? 'Belum ada aktivitas yang dicatat.' : 'Tidak ada log yang cocok dengan filter atau kata kunci.'}</span>
             </div>
         `;
         return;
     }
 
     const BADGE_CONFIG = {
-        success: { text: 'SUKSES', cls: 'aw-log-badge-success', icon: '✅' },
-        warn:    { text: 'WARN',   cls: 'aw-log-badge-warn',    icon: '⚠️' },
-        error:   { text: 'ERROR',  cls: 'aw-log-badge-error',   icon: '❌' },
-        info:    { text: 'INFO',   cls: 'aw-log-badge-info',    icon: 'ℹ️' }
+        success: { text: 'SUKSES', cls: 'aw-log-badge-success', dot: '#00ff88' },
+        warn:    { text: 'WARN',   cls: 'aw-log-badge-warn',    dot: '#ffd166' },
+        error:   { text: 'ERROR',  cls: 'aw-log-badge-error',   dot: '#ff6b6b' },
+        info:    { text: 'INFO',   cls: 'aw-log-badge-info',    dot: '#38bdf8' }
     };
 
     container.replaceChildren(...filtered.map(entry => {
@@ -507,7 +508,7 @@ function renderLogs(state, filterType, filterText) {
         const badge = document.createElement('span');
         const bConf = BADGE_CONFIG[entry.type] || BADGE_CONFIG.info;
         badge.className = `aw-log-badge ${bConf.cls}`;
-        badge.textContent = `${bConf.icon} ${bConf.text}`;
+        badge.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:${bConf.dot};display:inline-block;margin-right:4px;"></span>${bConf.text}`;
 
         // Message
         const msg = document.createElement('span');
@@ -522,7 +523,7 @@ function renderLogs(state, filterType, filterText) {
         copyBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             navigator.clipboard.writeText(`[${entry.time}] ${entry.message}`).then(() => {
-                copyBtn.textContent = '✓';
+                copyBtn.textContent = 'Tersalin';
                 copyBtn.style.color = '#00ff88';
                 setTimeout(() => {
                     copyBtn.textContent = 'Salin';

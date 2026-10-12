@@ -76,14 +76,14 @@ export function handleNewToken(state, logFn, wakePendingWork, rawCandidate, sour
         ? `${expiry.toLocaleTimeString('id-ID')} (${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m)`
         : 'Tidak ada exp';
 
-    logFn(`🔑 Token valid via ${source}! Exp: ${timeStr}`, 'success');
+    logFn(`Token valid via ${source}! Exp: ${timeStr}`, 'success');
 
     state.tokenExpired     = false;
 
     if (state.pausedForToken || !state.running) {
         state.running = true;
         state.pausedForToken = false;
-        logFn('▶️ Sesi diperbarui. Script dilanjutkan otomatis!', 'success');
+        logFn('Sesi diperbarui. Script dilanjutkan otomatis.', 'success');
         onResume?.();
         wakePendingWork?.();
     }
