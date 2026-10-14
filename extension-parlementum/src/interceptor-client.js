@@ -7,6 +7,7 @@
  */
 
 import { patchPageVisualEnergy } from './energy.js';
+import { setValue } from './storage.js';
 
 const MSG_SOURCE = 'PARLAMENTUM_INTERCEPTOR';
 const EXT_SOURCE = 'PARLAMENTUM_EXTENSION';
@@ -44,6 +45,20 @@ export function initInterceptorClient(state, CONFIG, ctx) {
 
             case 'WORK_REJECTED':
                 _handleWorkRejected(state, msg, ctx);
+                break;
+
+            case 'FOOD_STATUS':
+                if (typeof msg.foodEatenToday === 'number') {
+                    state.foodEatenToday = Math.max(0, Math.min(10, Math.round(msg.foodEatenToday)));
+                    setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                    ctx?.updatePanel?.();
+                }
+                break;
+
+            case 'FOOD_CONSUMED':
+                state.foodEatenToday = Math.min(10, (state.foodEatenToday || 0) + 1);
+                setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                ctx?.updatePanel?.();
                 break;
 
             default:
@@ -144,8 +159,8 @@ function _handleWorkSuccess(state, msg, ctx) {
 
     const unitsPart = units > 0 ? ` | +${units} unit` : '';
     const logMsg = wasDomTriggered
-        ? `Kerja sukses! +${xp} XP${unitsPart} | Sisa: ${state.currentEnergy}/${state.maxEnergy} EN`
-        : `Shift di game terdeteksi: +${xp} XP${unitsPart} | Sisa: ${state.currentEnergy} EN`;
+        ? `Kerja sukses! +${xp} XP${unitsPart}`
+        : `Shift di game terdeteksi: +${xp} XP${unitsPart}`;
     ctx?.log?.(logMsg, 'success');
     ctx?.updatePanel?.();
 

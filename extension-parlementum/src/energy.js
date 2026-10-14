@@ -1,6 +1,12 @@
 /**
- * energy.js — DOM energy scraping and time-based sync estimation
+ * Returns true if the current page is the primary game dashboard where
+ * live energy cards and active DOM updates reside.
  */
+export function isDashboardPage() {
+    if (typeof window === 'undefined') return false;
+    const path = (window.location.pathname || '').toLowerCase();
+    return path === '/dashboard' || path.startsWith('/dashboard/') || path === '/' || path === '';
+}
 
 /** @returns {{ current: number, max: number }|null} */
 export function getCurrentEnergy() {
@@ -10,7 +16,7 @@ export function getCurrentEnergy() {
         );
 
         // ── Priority 1: Top Navigation Bar Spatial Search (Fastest: < 0.2ms) ──
-        // Top header renders the compact pill with [⚡ 44/110] across all pages
+        // Top header renders the compact pill with [44/110] across all pages
         const topCandidates = document.querySelectorAll('header, nav, [role="banner"], [class*="nav" i], [class*="header" i], [class*="topbar" i], [class*="navbar" i]');
         for (const container of topCandidates) {
             if (isExcluded(container)) continue;
@@ -21,7 +27,7 @@ export function getCurrentEnergy() {
                 const text = (el.textContent || '').trim();
                 if (!text.includes('/')) continue;
                 if (text.length > 30) continue; // must be a compact pill/label
-                const m = text.match(/(?:⚡|\b)(\d+)\s*\/\s*(\d+)\b/);
+                const m = text.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)\b/);
                 if (m) {
                     const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
                     if (max >= 50 && max <= 350 && current <= max) {
@@ -41,7 +47,7 @@ export function getCurrentEnergy() {
         for (const h of energyHeaders) {
             if (isExcluded(h)) continue;
             const t = (h.textContent || '').trim();
-            if (/^⚡?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 30) {
+            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 30) {
                 // Search in parent card (up to 4 levels up)
                 let card = h.parentElement;
                 for (let level = 0; level < 4 && card && card !== document.body; level++) {
@@ -50,7 +56,7 @@ export function getCurrentEnergy() {
                         if (isExcluded(el)) continue;
                         const txt = (el.textContent || '').trim();
                         if (!txt.includes('/') || txt.length > 25) continue;
-                        const m = txt.match(/(?:⚡|\b)(\d+)\s*\/\s*(\d+)/);
+                        const m = txt.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)/);
                         if (m) {
                             const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
                             if (max >= 50 && max <= 350 && current <= max) {
@@ -79,11 +85,11 @@ export function getCurrentEnergy() {
             const text = (el.textContent || '').trim();
             if (!text.includes('/')) continue;
             if (text.length > 35) continue;
-            const m = text.match(/(?:⚡|\b)(\d+)\s*\/\s*(\d+)\b/);
+            const m = text.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)\b/);
             if (m) {
                 const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
                 if (max >= 50 && max <= 350 && current <= max) {
-                    const hasIcon = text.includes('⚡') || Boolean(el.querySelector('svg'));
+                    const hasIcon = text.includes('\u26A1') || Boolean(el.querySelector('svg'));
                     matches.push({ current, max, len: text.length, hasIcon });
                 }
             }
@@ -155,29 +161,44 @@ export function updatePageEnergyDOM(current, max) {
 }
 
 /**
- * Returns energy using page DOM when visible, or time-based estimation when tab is in background.
+ * Returns energy using active Dashboard page DOM when visible,
+ * or time-based estimation when on static non-dashboard tabs (e.g. /pasar) or background tabs.
  * @param {object} state
  */
 export function getSyncedEnergy(state) {
     const isHidden = typeof document !== 'undefined' && document.hidden;
     const now      = Date.now();
+    const isDash   = isDashboardPage();
 
-    // 1. Eco Mode / Background Tab: Use O(1) mathematical calculation when invisible
-    // Eliminates redundant DOM traversal while running smoothly in background!
-    if (isHidden && state.energySyncBase && typeof state.energySyncBase.current === 'number') {
+    // 1. Static Non-Dashboard Page (e.g. /pasar, /pasar-global) OR Hidden/Background Tab:
+    // The DOM on non-dashboard pages is a static snapshot from initial page load and does not auto-regenerate.
+    // Use O(1) mathematical calculation based on energySyncBase so energy keeps ticking up smoothly!
+    if ((isHidden || !isDash) && state.energySyncBase && typeof state.energySyncBase.current === 'number') {
         const syncBase = state.energySyncBase;
         const max = syncBase.max || state.maxEnergy || 115;
         const elapsedMins = syncBase.updatedAt ? (now - syncBase.updatedAt) / 60000 : 0;
         const regenRate = state.regenRate || 1.0;
         const gained = Math.floor(elapsedMins * regenRate);
         const calculated = Math.min(max, syncBase.current + Math.max(0, gained));
+
+        // On non-dashboard pages, if the static DOM navbar was somehow higher (e.g. user ate bread on another tab and refreshed /pasar):
+        if (!isDash) {
+            const pageEnergy = getCurrentEnergy();
+            if (pageEnergy && pageEnergy.current > calculated) {
+                state.energySyncBase = { current: pageEnergy.current, max: pageEnergy.max, updatedAt: now };
+                state.currentEnergy = pageEnergy.current;
+                state.maxEnergy = pageEnergy.max;
+                return pageEnergy;
+            }
+        }
+
         return { current: calculated, max };
     }
 
     const pageEnergy = getCurrentEnergy();
 
-    // 1. Visible DOM is ALWAYS ground truth when tab is in foreground!
-    if (pageEnergy && !isHidden) {
+    // 2. Visible Dashboard DOM is ALWAYS ground truth when on /dashboard!
+    if (pageEnergy && !isHidden && isDash) {
         state.domEnergyStale = false;
         state.currentEnergy = pageEnergy.current;
         state.maxEnergy = pageEnergy.max;
@@ -185,7 +206,7 @@ export function getSyncedEnergy(state) {
         return pageEnergy;
     }
 
-    // 2. Eco Mode / Background Tab: Use O(1) mathematical calculation when invisible or transitioning
+    // 3. Fallback to energySyncBase
     const syncBase = state.energySyncBase;
     if (syncBase && typeof syncBase.current === 'number') {
         const max = syncBase.max || state.maxEnergy || 115;
@@ -240,7 +261,7 @@ export function getGameEnergyFullText() {
         for (const h of energyHeaders) {
             if (isExcluded(h)) continue;
             const t = (h.textContent || '').trim();
-            if (/^⚡?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 25) {
+            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 25) {
                 let card = h.parentElement;
                 for (let level = 0; level < 4 && card && card !== document.body; level++) {
                     const txt = card.innerText || card.textContent || '';
@@ -441,20 +462,48 @@ export function getMsUntilSleepEnd(CONFIG) {
     return Math.max(1000, end.getTime() - now.getTime());
 }
 
+/** @param {object} CONFIG @returns {boolean} */
+export function isEnergyFlushActive(CONFIG) {
+    if (!CONFIG?.energyFlushEnabled) return false;
+    const now = new Date();
+    const utcHours = now.getUTCHours();
+    const utcMinutes = now.getUTCMinutes();
+    // 23:15 s/d 23:59 UTC (45 menit sebelum reset server harian)
+    return utcHours === 23 && utcMinutes >= 15;
+}
+
+/** @param {object} state @param {object} CONFIG @returns {number} */
+export function getEffectiveEnergyThreshold(state, CONFIG) {
+    if (isEnergyFlushActive(CONFIG)) {
+        return 10;
+    }
+    return CONFIG?.energyThreshold || 10;
+}
+
 /** @param {object} state @param {object} CONFIG @returns {number} milliseconds to wait */
 export function getNextWorkDelay(state, CONFIG) {
     if (isSleepTime(CONFIG)) {
         return getMsUntilSleepEnd(CONFIG);
     }
 
-    let threshold = CONFIG.energyThreshold;
-    if (CONFIG.stealthJitterEnabled) {
+    const isFlush = isEnergyFlushActive(CONFIG);
+    let threshold = getEffectiveEnergyThreshold(state, CONFIG);
+
+    if (!isFlush && CONFIG.stealthJitterEnabled) {
         // Humanizer: variasi acak -1 s/d +2 energi
         const variance = Math.floor(Math.random() * 4) - 1;
         threshold = Math.min(100, Math.max(10, threshold + variance));
     }
 
-    if (state.currentEnergy >= threshold) return 3000;
+    if (state.currentEnergy >= threshold) {
+        // Dynamic Timing Jitter: jeda acak 5 - 25 detik agar timing kerja natural
+        if (CONFIG.stealthJitterEnabled) {
+            const maxJitter = (CONFIG.stealthJitterMaxSeconds || 25) * 1000;
+            return Math.floor(Math.random() * (maxJitter - 4000)) + 4000;
+        }
+        return 3000;
+    }
+
     const energyNeeded = threshold - state.currentEnergy;
     const regenRate = state.regenRate || getRegionHealthBonus() || 1.0;
     state.regenRate = regenRate;
@@ -466,15 +515,16 @@ export function getNextWorkDelay(state, CONFIG) {
 /** @param {object} state @param {object} CONFIG @returns {string} */
 export function getLiveCountdown(state, CONFIG) {
     if (isSleepTime(CONFIG)) return 'Tidur';
-    const threshold = CONFIG.energyThreshold || 10;
+    const isFlush = isEnergyFlushActive(CONFIG);
+    const threshold = getEffectiveEnergyThreshold(state, CONFIG);
     const curEnergy = state.currentEnergy ?? 0;
-    if (curEnergy >= threshold) return 'Now!';
+    if (curEnergy >= threshold) return isFlush ? 'Flush!' : 'Now!';
     let remaining = (state.nextWorkTimestamp || 0) - Date.now();
     if (!state.nextWorkTimestamp && curEnergy < threshold) {
         const regenRate = state.regenRate || 1.0;
         remaining = Math.max(1, (threshold - curEnergy) / regenRate) * 60000;
     }
-    if (remaining <= 0) return 'Menunggu energi...';
+    if (remaining <= 0) return isFlush ? 'Flush...' : 'Menunggu energi...';
     const total = Math.ceil(remaining / 1000);
     return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
 }
@@ -562,7 +612,7 @@ export function patchPageVisualEnergy(current, max, force = false) {
             const container = el.closest('div, section, article');
             if (container) {
                 const text = container.textContent || '';
-                if (FORBIDDEN_WORDS.test(text) && !/^\s*⚡?\s*ENERGI\b/i.test(text)) {
+                if (FORBIDDEN_WORDS.test(text) && !/^\s*(?:\u26A1)?\s*ENERGI\b/i.test(text)) {
                     return true;
                 }
             }
@@ -607,7 +657,7 @@ export function patchPageVisualEnergy(current, max, force = false) {
         for (const h of energyHeaders) {
             if (isExcluded(h)) continue;
             const t = (h.textContent || '').trim();
-            if (/^⚡?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 15) {
+            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 15) {
                 let card = h.parentElement;
                 let depth = 0;
                 while (card && card !== document.body && depth < 5) {
@@ -662,13 +712,13 @@ export function patchPageVisualEnergy(current, max, force = false) {
             if (isExcluded(btn)) continue;
             const btnText = (btn.textContent || '').trim();
             if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(btnText)) {
-                // Update ⚡ number inside button if present
+                // Update energy number inside button if present
                 const walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
                 let node;
                 while ((node = walker.nextNode())) {
                     const val = node.nodeValue || '';
-                    if (/⚡?\s*\d+/.test(val)) {
-                        node.nodeValue = val.replace(/(⚡?\s*)(\d+)/, `$1${safeCurrent}`);
+                    if (/(?:\u26A1)?\s*\d+/.test(val)) {
+                        node.nodeValue = val.replace(/((?:\u26A1)?\s*)(\d+)/, `$1${safeCurrent}`);
                     }
                 }
                 if (safeCurrent < 10) {

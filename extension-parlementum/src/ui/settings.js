@@ -379,6 +379,19 @@ export function createSettingsModal(CONFIG, ctx) {
                         </div>
                     </div>
 
+                    <div class="aw-card">
+                        <div class="aw-card-row">
+                            <div class="aw-card-info">
+                                <div class="aw-card-title">Energy Flush 00:00 UTC (Jam Emas)</div>
+                                <div class="aw-card-desc">Otomatis menguras seluruh sisa energi (≥ 10 EN) 45 menit sebelum reset server harian (23:15-23:59 UTC / 06:15-06:59 WIB) agar tidak ada energi yang hangus.</div>
+                            </div>
+                            <label class="aw-switch">
+                                <input type="checkbox" id="setting-energy-flush" ${CONFIG.energyFlushEnabled ? 'checked' : ''}>
+                                <span class="aw-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Formula Sleep Info Card -->
                     <div style="background: rgba(0, 255, 136, 0.04); border: 1px solid rgba(0, 255, 136, 0.15); border-radius: 10px; padding: 14px; margin-top: 14px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -604,6 +617,32 @@ export function createSettingsModal(CONFIG, ctx) {
                     </div>
 
                     <div class="aw-card">
+                        <div class="aw-card-row">
+                            <div class="aw-card-info">
+                                <div class="aw-card-title">Auto-Refresh Tab Higienis (Pembersih Memori)</div>
+                                <div class="aw-card-desc">Memuat ulang tab secara higienis setelah berjalan 12+ jam saat energi kosong (< 20 EN) dan countdown masih lama (> 20 menit), mencegah tab browser crash karena memory leak game.</div>
+                            </div>
+                            <label class="aw-switch">
+                                <input type="checkbox" id="setting-auto-reload-tab" ${CONFIG.autoReloadTabEnabled ? 'checked' : ''}>
+                                <span class="aw-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="aw-card">
+                        <div class="aw-card-row">
+                            <div class="aw-card-info">
+                                <div class="aw-card-title">Circuit Breaker Keamanan (Anti-Spam)</div>
+                                <div class="aw-card-desc">Otomatis mengunci worker jika server game masuk mode pemeliharaan (502/503) atau memunculkan pemeriksaan Cloudflare / Captcha.</div>
+                            </div>
+                            <label class="aw-switch">
+                                <input type="checkbox" id="setting-circuit-breaker" ${CONFIG.circuitBreakerEnabled ? 'checked' : ''}>
+                                <span class="aw-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="aw-card">
                         <div class="aw-card-row" style="margin-bottom: 10px;">
                             <div class="aw-card-info">
                                 <div class="aw-card-title">Masuk Otomatis (Auto Re-Login)</div>
@@ -763,6 +802,15 @@ export function createSettingsModal(CONFIG, ctx) {
         // 6. Stealth & Jam Tidur Malam
         const stealthEl = document.getElementById('setting-stealth-jitter');
         if (stealthEl) CONFIG.stealthJitterEnabled = stealthEl.checked;
+
+        const energyFlushEl = document.getElementById('setting-energy-flush');
+        if (energyFlushEl) CONFIG.energyFlushEnabled = energyFlushEl.checked;
+
+        const autoReloadTabEl = document.getElementById('setting-auto-reload-tab');
+        if (autoReloadTabEl) CONFIG.autoReloadTabEnabled = autoReloadTabEl.checked;
+
+        const circuitBreakerEl = document.getElementById('setting-circuit-breaker');
+        if (circuitBreakerEl) CONFIG.circuitBreakerEnabled = circuitBreakerEl.checked;
 
         const sleepEl = document.getElementById('setting-sleep-schedule');
         if (sleepEl) CONFIG.sleepScheduleEnabled = sleepEl.checked;
@@ -1158,6 +1206,15 @@ export function openSettings(CONFIG, ctx) {
 
     const stealthCb = document.getElementById('setting-stealth-jitter');
     if (stealthCb) stealthCb.checked = Boolean(CONFIG.stealthJitterEnabled);
+
+    const energyFlushCb = document.getElementById('setting-energy-flush');
+    if (energyFlushCb) energyFlushCb.checked = Boolean(CONFIG.energyFlushEnabled);
+
+    const autoReloadTabCb = document.getElementById('setting-auto-reload-tab');
+    if (autoReloadTabCb) autoReloadTabCb.checked = Boolean(CONFIG.autoReloadTabEnabled);
+
+    const circuitBreakerCb = document.getElementById('setting-circuit-breaker');
+    if (circuitBreakerCb) circuitBreakerCb.checked = Boolean(CONFIG.circuitBreakerEnabled);
 
     const sleepCb = document.getElementById('setting-sleep-schedule');
     if (sleepCb) sleepCb.checked = Boolean(CONFIG.sleepScheduleEnabled);

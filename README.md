@@ -37,12 +37,18 @@ If you cloned this repository, you can directly load the `extension-parlementum-
 - **Threshold-Based Work**: Automatically triggers work shifts when your energy reaches your configured target (default is 100 EN).
 - **Network Interception & DOM Fallback**: Listens directly to `/api/player/work` responses in the main world context to get ground-truth energy and production numbers. If API requests cannot be dispatched directly, it falls back to native DOM clicks on the verified `data-testid="work"` button.
 - **Accurate Region Regen Calculations**: Reads local region infrastructure data and Crown Index multipliers (such as West Java's +50% health regen) to calculate your true energy recovery rate and exact countdowns.
-- **Low Resource Usage (Eco Mode)**: When the game tab is in the background, expensive DOM polling and animations are paused. Energy recovery relies on timestamp delta math rather than active polling loops, so leaving the tab open for days will not bog down your browser.
-- **Timing Jitter**: Adds slight, randomized variations (around plus or minus 2 EN / random second offsets) to avoid robotic, perfectly fixed-interval work patterns.
+- **Energy Flush 00:00 UTC (Jam Emas)**: Automatically works at lower thresholds 45 minutes before 00:00 UTC reset to ensure no energy is wasted before the server rollover.
+- **Dynamic Timing Jitter**: Adds slight, randomized variations (5-25 seconds) to work execution intervals to avoid robotic, fixed-interval patterns.
+- **Circuit Breaker Safety**: Automatically detects Cloudflare challenges, Turnstile/verifications, 502/503/504 server maintenance, and interactive Captchas, pausing the worker safely.
+- **Hygienic Auto-Reload**: Refreshes the game tab cleanly after 12+ hours uptime when energy is low, preventing long-term browser memory leaks.
+- **Daily Food Slot Tracker**: Monitors the daily 10-slot bread quota, captures game toasts ("Batas roti harian tercapai"), and offers quick +/- and full-set controls on the widget and popup.
+- **Low Resource Usage (Eco Mode)**: When the game tab is in the background, expensive DOM polling and animations are paused. Energy recovery relies on timestamp delta math rather than active polling loops.
 - **Sleep Schedule**: Lets you define rest windows (e.g. 01:00 - 06:00) during which the worker stays paused.
 - **Floating HUD & Toolbar Popup**: Check remaining energy, shift timers, and recent production from either the draggable in-game widget or the browser action popup.
 - **Activity Log**: Built-in searchable log with filters (Success, Info, Warning, Error) to audit past shifts, XP gained, and items produced.
 - **Session Auto-Refresh**: If a session token expires with a 401 response, the extension reloads the tab to pick up refreshed session cookies.
+
+For development tasks, pending items, and upcoming features, see [ROADMAP.md](ROADMAP.md).
 
 ---
 

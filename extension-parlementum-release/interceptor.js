@@ -117,6 +117,35 @@
                     raw: data
                 });
             }
+
+            // 3. Scanner for food / bread consumption
+            let foodEaten = null;
+            if (typeof data.foodEatenToday === 'number') foodEaten = data.foodEatenToday;
+            else if (typeof data.food_eaten_today === 'number') foodEaten = data.food_eaten_today;
+            else if (typeof data.foodUsed === 'number') foodEaten = data.foodUsed;
+            else if (p && typeof p === 'object') {
+                if (typeof p.foodEatenToday === 'number') foodEaten = p.foodEatenToday;
+                else if (typeof p.food_eaten_today === 'number') foodEaten = p.food_eaten_today;
+                else if (typeof p.foodUsed === 'number') foodEaten = p.foodUsed;
+            }
+
+            // Check if response message indicates daily food limit reached
+            const msgStr = (typeof data.message === 'string' ? data.message : '') +
+                           ' ' + (typeof data.error === 'string' ? data.error : '') +
+                           ' ' + (typeof data.msg === 'string' ? data.msg : '') +
+                           ' ' + (typeof data.detail === 'string' ? data.detail : '');
+            if (/batas roti harian tercapai/i.test(msgStr) || /daily bread limit/i.test(msgStr)) {
+                foodEaten = 10;
+            }
+
+            if (foodEaten !== null) {
+                sendToExtension('FOOD_STATUS', { foodEatenToday: foodEaten });
+            }
+
+            const isFoodUrl = /eat|food|roti|bread|item\/use|inventory\/use|consume/i.test(url);
+            if (isFoodUrl && status >= 200 && status < 300) {
+                sendToExtension('FOOD_CONSUMED', { raw: data });
+            }
         } catch { /* ignore */ }
     }
 
@@ -145,6 +174,18 @@
                     if (contentType.includes('application/json')) {
                         clone.json().then(data => {
                             scanAndDispatchApiData(url, response.status, data);
+                        }).catch(() => {
+                            clone.text().then(text => {
+                                if (/batas roti harian tercapai/i.test(text)) {
+                                    sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
+                                }
+                            }).catch(() => {});
+                        });
+                    } else {
+                        clone.text().then(text => {
+                            if (/batas roti harian tercapai/i.test(text)) {
+                                sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
+                            }
                         }).catch(() => {});
                     }
                 }
@@ -180,8 +221,16 @@
                     if (url && (url.includes('/api/') || url.startsWith('/api/'))) {
                         const ct = this.getResponseHeader('content-type') || '';
                         if (ct.includes('application/json') && this.responseText) {
-                            const data = JSON.parse(this.responseText);
-                            scanAndDispatchApiData(url, this.status, data);
+                            try {
+                                const data = JSON.parse(this.responseText);
+                                scanAndDispatchApiData(url, this.status, data);
+                            } catch {
+                                if (/batas roti harian tercapai/i.test(this.responseText)) {
+                                    sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
+                                }
+                            }
+                        } else if (this.responseText && /batas roti harian tercapai/i.test(this.responseText)) {
+                            sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
                         }
                     }
                 } catch { /* ignore */ }

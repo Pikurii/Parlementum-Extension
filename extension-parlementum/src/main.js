@@ -13,7 +13,7 @@ import { log as _log, setLogUpdateCallback }                  from './logger.js'
 import { parseJwt, handleNewToken as _handleNewToken, getTokenFromStorage as _getTokenFromStorage,
          getTimeUntilExpiry, startTokenWatcher }              from './token.js';
 import { getSyncedEnergy, getCurrentEnergy, waitForEnergyElement, getPlayerLevel, getMaxEnergyForLevel,
-         getLiveCountdown, getTimeToFullEnergy, getNextWorkDelay, patchPageVisualEnergy, getRegionHealthBonus, getRegionDetails } from './energy.js';
+         getLiveCountdown, getTimeToFullEnergy, getNextWorkDelay, patchPageVisualEnergy, getRegionHealthBonus, getRegionDetails, isDashboardPage, getEffectiveEnergyThreshold, isEnergyFlushActive } from './energy.js';
 import { sendNotification, playNotificationSound, playEnergyFullAlarm, showInPageNotification } from './notifications.js';
 import { doWork }                                             from './work.js';
 import { createPanel, updatePanel as _updatePanel, setRunningUI, updatePanelVisibility } from './ui/panel.js';
@@ -119,6 +119,8 @@ import { initInterceptorClient }                              from './intercepto
         if (state.lastWorkDate === today) return;
         state.workToday  = 0;
         state.xpToday    = 0;
+        state.foodEatenToday = 0;
+        setValue('aw_foodEatenToday', '0');
         state.lastWorkDate = today;
         state.sessionStartTime = Date.now();
         setValue('sessionStartTime', state.sessionStartTime.toString());
@@ -128,7 +130,7 @@ import { initInterceptorClient }                              from './intercepto
         setValue('xpToday', '0');
         setValue('lastWorkDate', today);
         saveWorkHistory(workHistory);
-        log('Hari berganti. Counter & sesi di-reset.', 'info');
+        log('Hari berganti (00:00 UTC). Kuota makanan (10 slot), counter shift & sesi di-reset.', 'info');
         updatePanel();
     }
 
@@ -182,8 +184,10 @@ import { initInterceptorClient }                              from './intercepto
                 resolve();
             };
             wakePendingWork = finish;
-            if (bgTimerWorker) { bgTimerWorker.onmessage = finish; bgTimerWorker.postMessage(Math.max(10, delay)); }
-            pendingWorkTimer = setTimeout(finish, delay);
+            // Cap single timer sleep to 30s so background tab throttling doesn't freeze the loop for hours
+            const cappedDelay = Math.min(delay, 30000);
+            if (bgTimerWorker) { bgTimerWorker.onmessage = finish; bgTimerWorker.postMessage(Math.max(10, cappedDelay)); }
+            pendingWorkTimer = setTimeout(finish, cappedDelay);
         });
     }
 
@@ -269,11 +273,28 @@ import { initInterceptorClient }                              from './intercepto
     // Pre-seed energy from DOM — wait for React SPA to render the element (up to 15s)
     waitForEnergyElement(15000).then(energy => {
         if (energy) {
-            state.currentEnergy = energy.current;
-            state.maxEnergy     = energy.max;
-            state.domEnergyStale = false;
-            state.lastWorkTimestamp = 0; // Fresh page load: DOM is 100% authoritative ground truth!
-            state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
+            const isDash = isDashboardPage();
+            const storedLive = getValue('aw_live_status');
+            const hasFresherStorage = !isDash && storedLive && storedLive.currentEnergy != null && (
+                storedLive.currentEnergy > energy.current ||
+                (storedLive.updatedAt && Date.now() - storedLive.updatedAt < 300000)
+            );
+
+            if (hasFresherStorage) {
+                state.currentEnergy = storedLive.currentEnergy;
+                state.maxEnergy = storedLive.maxEnergy || energy.max;
+                state.energySyncBase = {
+                    current: storedLive.currentEnergy,
+                    max: state.maxEnergy,
+                    updatedAt: storedLive.updatedAt || Date.now()
+                };
+            } else {
+                state.currentEnergy = energy.current;
+                state.maxEnergy     = energy.max;
+                state.domEnergyStale = false;
+                state.lastWorkTimestamp = 0;
+                state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
+            }
 
             const regDetails = getRegionDetails(true);
             const healthBuff = regDetails.bonusMultiplier || 1.0;
@@ -284,8 +305,10 @@ import { initInterceptorClient }                              from './intercepto
                 log(`Buff Kota: Kesehatan +${bonusPct}% pemulihan energi pasif (${healthBuff}x / mnt)`, 'info');
             }
 
-            log(`Energi terbaca: ${energy.current}/${energy.max}`, 'info');
-            saveLiveStatus(state, CONFIG);
+            log(`Energi terbaca: ${state.currentEnergy}/${state.maxEnergy}`, 'info');
+            if (isDash) {
+                saveLiveStatus(state, CONFIG);
+            }
             updatePanel();
         } else {
             log('Elemen energi tidak ditemukan dalam 15 detik. Energi akan terbaca saat panel update.', 'warn');
@@ -296,6 +319,105 @@ import { initInterceptorClient }                              from './intercepto
     setInterval(checkDailyReset, 60000);
     setInterval(updatePanel, 1000);
     setInterval(reconcileUncertainWork, 10000);
+    setupDomToastObserver();
+
+    // ─── Real-Time Cross-Tab Coordination (BroadcastChannel) ─────────────────
+    let tabChannel = null;
+    try {
+        tabChannel = new BroadcastChannel('aw_parlamentum_tabs');
+    } catch { tabChannel = null; }
+
+    const isCurrentTabDashboard = isDashboardPage();
+
+    if (tabChannel) {
+        if (isCurrentTabDashboard) {
+            // Dashboard tab claims master leadership across all open tabs
+            tabChannel.postMessage({
+                type: 'CLAIM_LEADERSHIP_FOR_DASHBOARD',
+                timestamp: Date.now()
+            });
+        }
+
+        tabChannel.onmessage = (event) => {
+            const msg = event?.data;
+            if (!msg || typeof msg !== 'object') return;
+
+            // 1. Dashboard heartbeat received by non-dashboard tabs (e.g. /pasar)
+            if (msg.type === 'DASHBOARD_HEARTBEAT') {
+                state.hasActiveDashboardTab = true;
+                state.lastDashboardHeartbeat = Date.now();
+
+                // Non-dashboard tabs synchronize ground-truth state instantly with zero lag
+                if (!isDashboardPage()) {
+                    if (msg.currentEnergy != null) {
+                        state.currentEnergy = msg.currentEnergy;
+                        state.maxEnergy = msg.maxEnergy || state.maxEnergy;
+                        state.energySyncBase = {
+                            current: msg.currentEnergy,
+                            max: state.maxEnergy,
+                            updatedAt: msg.timestamp || Date.now()
+                        };
+                    }
+                    if (msg.regenRate != null) state.regenRate = msg.regenRate;
+                    if (msg.workToday != null) state.workToday = msg.workToday;
+                    if (msg.xpToday != null) state.xpToday = msg.xpToday;
+                    if (msg.totalWorked != null) state.totalWorked = msg.totalWorked;
+                    if (msg.totalWorkXP != null) state.totalWorkXP = msg.totalWorkXP;
+                    if (msg.lastWorkTime) state.lastWorkTime = msg.lastWorkTime;
+                    if (msg.nextWorkTimestamp != null) state.nextWorkTimestamp = msg.nextWorkTimestamp;
+
+                    updatePanel();
+                    patchPageVisualEnergy(state.currentEnergy, state.maxEnergy);
+                }
+            }
+
+            // 2. Dashboard claims leadership -> non-dashboard tabs holding the lock must yield!
+            if (msg.type === 'CLAIM_LEADERSHIP_FOR_DASHBOARD') {
+                state.hasActiveDashboardTab = true;
+                state.lastDashboardHeartbeat = Date.now();
+
+                if (!isDashboardPage() && state.isTabLockOwner) {
+                    console.log('[Auto Worker] Tab Dashboard terdeteksi. Mengalihkan worker lock ke tab Dashboard.');
+                    state.shouldYieldLock = true;
+                    wakePendingWork?.();
+                }
+            }
+
+            // 3. Dashboard tab closed -> non-dashboard tabs can immediately assume leadership
+            if (msg.type === 'DASHBOARD_CLOSED') {
+                state.hasActiveDashboardTab = false;
+                state.lastDashboardHeartbeat = 0;
+            }
+        };
+
+        // If this tab is on /dashboard, broadcast heartbeat every 2 seconds to keep other tabs synced
+        if (isCurrentTabDashboard) {
+            setInterval(() => {
+                if (tabChannel && isDashboardPage() && state.currentEnergy != null) {
+                    tabChannel.postMessage({
+                        type: 'DASHBOARD_HEARTBEAT',
+                        currentEnergy: state.currentEnergy,
+                        maxEnergy: state.maxEnergy,
+                        regenRate: state.regenRate,
+                        workToday: state.workToday,
+                        xpToday: state.xpToday,
+                        totalWorked: state.totalWorked,
+                        totalWorkXP: state.totalWorkXP,
+                        lastWorkTime: state.lastWorkTime,
+                        nextWorkTimestamp: state.nextWorkTimestamp,
+                        timestamp: Date.now()
+                    });
+                }
+            }, 2000);
+        } else {
+            // On non-dashboard tabs, check if dashboard tab is still alive every 4 seconds
+            setInterval(() => {
+                if (state.lastDashboardHeartbeat && Date.now() - state.lastDashboardHeartbeat > 7000) {
+                    state.hasActiveDashboardTab = false;
+                }
+            }, 4000);
+        }
+    }
 
     // ── Chrome Extension Runtime Message Listener (Popup & Background) ────
     try {
@@ -353,6 +475,15 @@ import { initInterceptorClient }                              from './intercepto
                     clearStoredLogs();
                     updateLogViewer(state, CONFIG);
                     sendResponse({ ok: true });
+                    return true;
+                }
+                if (msg.action === 'setFoodCount') {
+                    const newFood = Math.max(0, Math.min(10, Number(msg.value) || 0));
+                    state.foodEatenToday = newFood;
+                    setValue('aw_foodEatenToday', newFood.toString());
+                    saveLiveStatus(state, CONFIG, true);
+                    updatePanel();
+                    sendResponse({ ok: true, foodEatenToday: newFood });
                     return true;
                 }
             }
@@ -464,9 +595,9 @@ import { initInterceptorClient }                              from './intercepto
                                 state.currentEnergy = energy.current;
                                 state.maxEnergy = energy.max;
                             }
-                            const isCooldownActive = state.nextWorkTimestamp && (Date.now() < state.nextWorkTimestamp - 5000);
-                            const hasRecentWork = state.lastWorkTimestamp && (Date.now() - state.lastWorkTimestamp < 45000);
-                            if (state.isTabLockOwner && state.currentEnergy >= CONFIG.energyThreshold && !isCooldownActive && !hasRecentWork && !state.workInFlight && !state.workResultUncertain) {
+                            const hasRecentWork = state.lastWorkTimestamp && (Date.now() - state.lastWorkTimestamp < 30000);
+                            const isReadyToWork = state.currentEnergy >= CONFIG.energyThreshold;
+                            if (state.isTabLockOwner && isReadyToWork && !hasRecentWork && !state.workInFlight && !state.workResultUncertain) {
                                 log('Background wake: Energi target tercapai, mengeksekusi shift kerja...', 'info');
                                 const result = await doWork({ ...ctx }, false);
                                 saveLiveStatus(state, CONFIG);
@@ -506,17 +637,17 @@ import { initInterceptorClient }                              from './intercepto
                 (newValue.totalWorked || 0) > (state.totalWorked || 0)
             );
 
-            if (!state.isTabLockOwner || isBackgroundShift) {
+            // Follower tabs or non-dashboard tabs always synchronize state from leader
+            if (!state.isTabLockOwner || !isDashboardPage() || isBackgroundShift) {
                 if (newValue.workToday != null) state.workToday = newValue.workToday;
                 if (newValue.xpToday != null) state.xpToday = newValue.xpToday;
                 if (newValue.totalWorked != null) state.totalWorked = newValue.totalWorked;
                 if (newValue.totalWorkXP != null) state.totalWorkXP = newValue.totalWorkXP;
                 if (newValue.lastWorkTime) state.lastWorkTime = newValue.lastWorkTime;
                 if (newValue.nextWorkTimestamp != null) state.nextWorkTimestamp = newValue.nextWorkTimestamp;
-                if (isBackgroundShift && newValue.currentEnergy != null) {
+                if (newValue.currentEnergy != null) {
                     state.currentEnergy = newValue.currentEnergy;
                     state.lastWorkTimestamp = newValue.updatedAt || Date.now();
-                    state.domEnergyStale = true;
                     state.energySyncBase = {
                         current: newValue.currentEnergy,
                         max: newValue.maxEnergy || state.maxEnergy || 110,
@@ -541,6 +672,41 @@ import { initInterceptorClient }                              from './intercepto
 
     document.addEventListener('visibilitychange', _handleForegroundReturn);
     window.addEventListener('focus', _handleForegroundReturn);
+    window.addEventListener('online', _handleOnline);
+    window.addEventListener('offline', _handleOffline);
+    window.addEventListener('beforeunload', _handleBeforeUnload);
+
+    function _handleOnline() {
+        if (!chrome.runtime?.id) return;
+        state.isOffline = false;
+        errCount = 0;
+        log('Koneksi internet pulih (online). Memeriksa jadwal kerja...', 'info');
+        updatePanel();
+        wakePendingWork?.();
+    }
+
+    function _handleOffline() {
+        if (!chrome.runtime?.id) return;
+        state.isOffline = true;
+        log('Koneksi internet terputus (offline). Menunggu jaringan kembali...', 'warn');
+        updatePanel();
+    }
+
+    function _handleBeforeUnload() {
+        if (tabChannel) {
+            if (isDashboardPage()) {
+                try {
+                    tabChannel.postMessage({
+                        type: 'DASHBOARD_CLOSED',
+                        timestamp: Date.now()
+                    });
+                } catch { /* ignore */ }
+            }
+            try {
+                tabChannel.close();
+            } catch { /* ignore */ }
+        }
+    }
 
     function _handleForegroundReturn() {
         if (!chrome.runtime?.id) return;
@@ -591,29 +757,169 @@ import { initInterceptorClient }                              from './intercepto
 
             updatePanel();
             updatePanelVisibility(state, CONFIG);
-            if (state.running && state.isTabLockOwner && state.currentEnergy >= CONFIG.energyThreshold) {
+            if (state.running && state.isTabLockOwner && state.currentEnergy >= getEffectiveEnergyThreshold(state, CONFIG)) {
                 wakePendingWork?.();
             }
         });
     }
 
+    let errCount = 0;
+
+    function checkCircuitBreaker() {
+        if (!CONFIG.circuitBreakerEnabled) return { active: false, reason: '' };
+        try {
+            const title = (document.title || '').toLowerCase();
+            if (title.includes('just a moment') || title.includes('attention required') || title.includes('security check')) {
+                return { active: true, reason: 'Cloudflare Challenge terdeteksi' };
+            }
+            if (document.querySelector('#challenge-running, #cf-wrapper, .cf-turnstile, #cf-stage, .cf-browser-verification')) {
+                return { active: true, reason: 'Cloudflare Verification terdeteksi' };
+            }
+            const bodyText = (document.body?.innerText || '').substring(0, 500).toLowerCase();
+            if (bodyText.includes('502 bad gateway') || bodyText.includes('503 service unavailable') || bodyText.includes('504 gateway time-out') || bodyText.includes('server sedang pemeliharaan') || bodyText.includes('under maintenance')) {
+                return { active: true, reason: 'Server Maintenance / Error 50x terdeteksi' };
+            }
+            if (document.querySelector('iframe[src*="recaptcha"], iframe[src*="hcaptcha"], .h-captcha, .g-recaptcha')) {
+                return { active: true, reason: 'Captcha interaktif terdeteksi' };
+            }
+        } catch { /* ignore */ }
+        return { active: false, reason: '' };
+    }
+
+    function checkHygienicAutoReload() {
+        if (!CONFIG.autoReloadTabEnabled) return;
+        if (!state.running) return;
+        if (state.workInFlight || state.circuitBreakerActive) return;
+
+        const uptimeMs = Date.now() - state.scriptStartTime;
+        // 12 jam nonstop (43,200,000 ms)
+        if (uptimeMs >= 43200000) {
+            const curEnergy = state.currentEnergy ?? 0;
+            const remainingDelay = (state.nextWorkTimestamp || 0) - Date.now();
+            // Hanya reload jika energi sangat rendah (< 20 EN) dan countdown kerja berikutnya masih > 20 menit
+            if (curEnergy < 20 && remainingDelay > 1200000) {
+                log('[Auto Refresh] Membersihkan memori tab setelah berjalan 12+ jam. Memuat ulang tab game...', 'info');
+                saveLiveStatus(state, CONFIG, true);
+                setTimeout(() => {
+                    window.location.reload();
+                }, 2000);
+            }
+        }
+    }
+
+    function scanDomForFoodToast() {
+        if (state.foodEatenToday >= 10) return;
+        try {
+            const bodyText = document.body ? document.body.innerText || '' : '';
+            if (bodyText.includes('Batas roti harian tercapai') || bodyText.includes('batas roti harian tercapai')) {
+                state.foodEatenToday = 10;
+                setValue('aw_foodEatenToday', '10');
+                saveLiveStatus(state, CONFIG, true);
+                log('Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel 10/10.', 'info');
+                updatePanel();
+            }
+        } catch { /* ignore */ }
+    }
+
+    function setupDomToastObserver() {
+        scanDomForFoodToast();
+
+        if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+            const observer = new MutationObserver((mutations) => {
+                if (state.foodEatenToday >= 10) return;
+                for (const m of mutations) {
+                    for (const node of m.addedNodes) {
+                        if (node.nodeType === 1) {
+                            const txt = node.textContent || '';
+                            if (txt.includes('Batas roti harian tercapai') || txt.includes('batas roti harian tercapai')) {
+                                state.foodEatenToday = 10;
+                                setValue('aw_foodEatenToday', '10');
+                                saveLiveStatus(state, CONFIG, true);
+                                log('Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel 10/10.', 'info');
+                                updatePanel();
+                                return;
+                            }
+                        }
+                    }
+                }
+            });
+
+            try {
+                observer.observe(document.body || document.documentElement, {
+                    childList: true,
+                    subtree: true
+                });
+            } catch { /* ignore */ }
+        }
+
+        // Also scan after any click in the document (user clicking eat in UI)
+        document.addEventListener('click', () => {
+            setTimeout(scanDomForFoodToast, 400);
+        }, { passive: true });
+    }
+
     async function runWorkerLoop() {
-        let errCount = 0;
         while (true) {
             try {
                 if (!chrome.runtime?.id) {
                     console.warn('[Auto Worker] Ekstensi telah di-reload. Loop dihentikan bersih. Silakan refresh tab game (F5).');
                     return;
                 }
+
+                // Yield lock if a dashboard tab requested leadership
+                if (state.shouldYieldLock) {
+                    state.shouldYieldLock = false;
+                    _setTabLockOwner(state, false, ctx);
+                    return;
+                }
+
+                // Circuit Breaker: tangkal Cloudflare, Maintenance, atau Captcha
+                const cb = checkCircuitBreaker();
+                if (cb.active) {
+                    if (!state.circuitBreakerActive) {
+                        state.circuitBreakerActive = true;
+                        state.circuitBreakerReason = cb.reason;
+                        log(`[Circuit Breaker] ${cb.reason}. Worker dijeda otomatis demi keamanan akun.`, 'warn');
+                        updatePanel();
+                    }
+                    await waitForScheduledWork(30000);
+                    continue;
+                } else if (state.circuitBreakerActive) {
+                    state.circuitBreakerActive = false;
+                    state.circuitBreakerReason = '';
+                    log('[Circuit Breaker] Halaman game kembali normal. Melanjutkan jadwal kerja...', 'info');
+                    updatePanel();
+                }
+
+                // Auto-refresh higienis untuk mencegah memory leak peramban
+                checkHygienicAutoReload();
+
+                // Deteksi notifikasi batas makanan game jika muncul di DOM
+                scanDomForFoodToast();
+
+                // Pause gracefully if offline
+                if (typeof navigator !== 'undefined' && (navigator.onLine === false || state.isOffline)) {
+                    await waitForScheduledWork(5000);
+                    continue;
+                }
+
                 checkDailyReset();
                 if (state.running) {
+                    state.isEnergyFlushActive = isEnergyFlushActive(CONFIG);
+                    const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
+
+                    if (state.currentEnergy < effectiveThreshold && state.nextWorkTimestamp > Date.now()) {
+                        const delay = Math.max(1000, state.nextWorkTimestamp - Date.now());
+                        await waitForScheduledWork(delay);
+                        continue;
+                    }
                     const result = await doWork(ctx);
                     if (result === 'retrySoon') {
                         await waitForScheduledWork(5000);
                     } else if (result === 'retry') {
                         errCount++;
                         const backoff = Math.min(300000, 10000 * Math.pow(2, errCount - 1));
-                        log(`⏳ Retry dalam ${(backoff / 1000).toFixed(0)}s (percobaan ke-${errCount})...`, 'warn');
+                        log(`Retry dalam ${(backoff / 1000).toFixed(0)}s (percobaan ke-${errCount})...`, 'warn');
                         await waitForScheduledWork(backoff);
                     } else if (result === 'waiting' || result === 'worked') {
                         errCount = 0;
@@ -647,6 +953,15 @@ import { initInterceptorClient }                              from './intercepto
 
     _setTabLockOwner(state, false, ctx);
     while (true) {
+        // If this tab is NOT on dashboard and an active dashboard tab exists, do NOT compete for the lock!
+        // Let the dashboard tab be the authoritative worker leader.
+        if (!isDashboardPage() && state.hasActiveDashboardTab) {
+            state.waitedForTabLock = true;
+            _setTabLockOwner(state, false, ctx);
+            await new Promise(r => setTimeout(r, 3000));
+            continue;
+        }
+
         let acquired = false;
         try {
             await navigator.locks.request('parlamentum-auto-worker', { ifAvailable: true }, async lock => {
@@ -671,7 +986,7 @@ import { initInterceptorClient }                              from './intercepto
         if (!acquired) {
             state.waitedForTabLock = true;
             _setTabLockOwner(state, false, ctx);
-            await new Promise(r => setTimeout(r, 5000));
+            await new Promise(r => setTimeout(r, 3000));
         }
     }
 })();

@@ -1,18 +1,31 @@
 /**
  * popup.js — Interactive Extension Toolbar Controller
+ * Synchronized with the modernized dark-glassmorphic in-game floating panel.
  */
+
+const SVGS = {
+    zap: `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>`,
+    pause: `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`,
+    play: `<svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`,
+    clock: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>`,
+    shield: `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>`
+};
 
 let currentStatus = {
     running: true,
     currentEnergy: 0,
     maxEnergy: 100,
     nextWorkTimestamp: 0,
-    workToday: 0,
-    xpToday: 0,
     hasToken: false,
-    lastWorkTime: '--:--',
+    tokenExpiry: null,
+    tokenExpired: false,
+    pausedForToken: false,
+    energyThreshold: 10,
+    regionName: '',
+    regionHealthBonusPercent: 0,
+    regenRate: 1.0,
     lastLogMessage: '',
-    energyThreshold: 10
+    updatedAt: Date.now()
 };
 
 let currentConfig = {
@@ -38,33 +51,83 @@ function _isSleepTime(cfg) {
     return start < end ? (h >= start && h < end) : (h >= start || h < end);
 }
 
+function getTimeUntilExpiry(tokenExpiry) {
+    if (!tokenExpiry) return '--';
+    const diff = Number(tokenExpiry) - Date.now();
+    if (diff <= 0) return 'EXPIRED';
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    return `${hours}h ${mins}m`;
+}
+
+function getTimeToFullEnergy(currentE, maxE, regenRate) {
+    const safeMax = Math.max(50, maxE || 100);
+    const cur = Math.max(0, currentE ?? 0);
+    const needed = Math.max(0, safeMax - cur);
+    if (needed <= 0) return 'Penuh!';
+
+    const rate = Math.max(0.5, regenRate || 1.0);
+    const exactMinutes = Math.max(1, Math.round(needed / rate));
+
+    if (exactMinutes < 60) {
+        return `~${exactMinutes} mnt`;
+    }
+    const h = Math.floor(exactMinutes / 60);
+    const m = exactMinutes % 60;
+    if (m === 0) return `~${h} j`;
+    if (h < 24) return `~${h} j ${m} mnt`;
+    const d = Math.floor(h / 24);
+    return `~${d} hari ${h % 24} j`;
+}
+
 // ── DOM References ──────────────────────────────────────────────────────────
-const elStatusBadge  = document.getElementById('popup-status-badge');
-const elStatusText   = document.getElementById('popup-status-text');
-const elEnergyVal    = document.getElementById('popup-energy-val');
-const elEnergyTarget = document.getElementById('popup-energy-target');
-const elBarFill      = document.getElementById('popup-bar-fill');
-const elNextWork     = document.getElementById('popup-next-work');
-const elWorkToday    = document.getElementById('popup-work-today');
-const elXpToday      = document.getElementById('popup-xp-today');
-const elTokenStatus  = document.getElementById('popup-token-status');
-const elLastWork     = document.getElementById('popup-last-work');
-const elLastLog      = document.getElementById('popup-last-log');
-const elLastLogBox   = document.getElementById('popup-last-log-box');
-const btnOpenLog     = document.getElementById('btn-open-log-modal');
-const logModal       = document.getElementById('popup-log-modal');
-const btnCloseLog    = document.getElementById('btn-close-log-modal');
-const logFilterType  = document.getElementById('popup-log-filter-type');
-const logFilterText  = document.getElementById('popup-log-filter-text');
-const btnClearLogs   = document.getElementById('btn-clear-popup-logs');
-const logEntries     = document.getElementById('popup-log-entries');
-const logCount       = document.getElementById('popup-log-count');
-const btnToggle      = document.getElementById('btn-popup-toggle');
-const btnToggleText  = document.getElementById('btn-toggle-text');
-const btnWork        = document.getElementById('btn-popup-work');
-const btnOpen        = document.getElementById('btn-popup-open');
-const elTabDot       = document.getElementById('popup-tab-dot');
-const elTabText      = document.getElementById('popup-tab-text');
+const elStatusDot     = document.getElementById('popup-status-dot');
+const elStatusBadge   = document.getElementById('popup-status-badge');
+const elStatusText    = document.getElementById('popup-status-text');
+
+const elRegionRow     = document.getElementById('popup-region-row');
+const elRegionText    = document.getElementById('popup-region-text');
+const elRegionBuff    = document.getElementById('popup-region-buff');
+
+const elUtcTime       = document.getElementById('popup-utc-time');
+const elUtcReset      = document.getElementById('popup-utc-reset');
+const elFlushBadge    = document.getElementById('popup-flush-badge');
+
+const elFoodVal       = document.getElementById('popup-food-val');
+const elFoodStatus    = document.getElementById('popup-food-status');
+const elCbBanner      = document.getElementById('popup-cb-banner');
+
+const elEnergyVal     = document.getElementById('popup-energy-val');
+const elBarFill       = document.getElementById('popup-bar-fill');
+const elNextWork      = document.getElementById('popup-next-work');
+const elFullEnergy    = document.getElementById('popup-full-energy');
+
+const elModeIcon      = document.getElementById('popup-mode-icon');
+const elModeTitle     = document.getElementById('popup-mode-title');
+const elEnergyTarget  = document.getElementById('popup-energy-target');
+const elShiftCountdown = document.getElementById('popup-shift-countdown');
+
+const elTokenStatus   = document.getElementById('popup-token-status');
+const elTokenExpiry   = document.getElementById('popup-token-expiry');
+
+const btnWork         = document.getElementById('btn-popup-work');
+const btnWorkText     = document.getElementById('btn-work-text');
+const btnToggle       = document.getElementById('btn-popup-toggle');
+const btnToggleIcon   = document.getElementById('btn-toggle-icon');
+const btnToggleText   = document.getElementById('btn-toggle-text');
+const btnOpenLog      = document.getElementById('btn-open-log-modal');
+const btnOpen         = document.getElementById('btn-popup-open');
+
+const elTabDot        = document.getElementById('popup-tab-dot');
+const elTabText       = document.getElementById('popup-tab-text');
+
+// Modal Elements
+const logModal        = document.getElementById('popup-log-modal');
+const btnCloseLog     = document.getElementById('btn-close-log-modal');
+const logFilterText   = document.getElementById('popup-log-filter-text');
+const btnClearLogs    = document.getElementById('btn-clear-popup-logs');
+const logEntries      = document.getElementById('popup-log-entries');
+const logCount        = document.getElementById('popup-log-count');
 
 let currentLogs = [];
 let logFilter   = 'all';
@@ -76,15 +139,17 @@ function renderUI() {
     const threshold = currentConfig.energyThreshold || currentStatus.energyThreshold || 10;
     let currentE    = currentStatus.currentEnergy ?? 0;
     const maxE      = currentStatus.maxEnergy || 100;
+
+    // Client-side smooth regen interpolation between storage syncs
     if (currentStatus.updatedAt && currentE < maxE) {
         const elapsedMins = (Date.now() - currentStatus.updatedAt) / 60000;
-        const regenRate = currentStatus.regenRate || 1.0;
-        const gained = Math.floor(elapsedMins * regenRate);
+        const rate = currentStatus.regenRate || 1.0;
+        const gained = Math.floor(elapsedMins * rate);
         if (gained > 0) {
             currentE = Math.min(maxE, currentE + gained);
         }
     }
-    const pct       = Math.max(0, Math.min(100, Math.round((currentE / maxE) * 100)));
+    const pct = Math.max(0, Math.min(100, Math.round((currentE / maxE) * 100)));
 
     const isExpired = Boolean(
         currentStatus.tokenExpired ||
@@ -93,116 +158,209 @@ function renderUI() {
         (currentStatus.tokenExpiry && Number(currentStatus.tokenExpiry) <= Date.now())
     );
 
-    // 1. Status badge
-    if (isExpired) {
-        elStatusBadge.className = 'status-badge paused';
-        elStatusText.textContent = 'EXPIRED';
-        btnToggle.className = 'btn btn-toggle-resume';
-        btnToggleText.textContent = 'Perlu Login Ulang';
-    } else if (isRunning) {
-        elStatusBadge.className = 'status-badge';
-        elStatusText.textContent = 'RUNNING';
-        btnToggle.className = 'btn btn-toggle-pause';
-        btnToggleText.textContent = 'Jeda Auto Worker';
-    } else {
-        elStatusBadge.className = 'status-badge paused';
-        elStatusText.textContent = 'PAUSED';
-        btnToggle.className = 'btn btn-toggle-resume';
-        btnToggleText.textContent = 'Lanjutkan Auto Worker';
-    }
+    const isSleeping = _isSleepTime(currentConfig);
+    const isReadyToWork = currentE >= threshold;
 
-    // Region & Buff
-    const elRegRow = document.getElementById('popup-region-row');
-    const elRegText = document.getElementById('popup-region-text');
-    const elRegBuff = document.getElementById('popup-region-buff');
-    if (elRegRow && elRegText && elRegBuff) {
-        if (currentStatus.regionName) {
-            elRegRow.style.display = 'flex';
-            elRegText.textContent = currentStatus.regionName;
-            elRegBuff.textContent = (currentStatus.regionHealthBonusPercent ?? 0) > 0
-                ? `+${currentStatus.regionHealthBonusPercent}% Regen`
-                : 'Normal (1.0x)';
-        } else {
-            elRegRow.style.display = 'none';
+    // 1. Status badge & Header Dot
+    if (isExpired) {
+        if (elStatusBadge) elStatusBadge.className = 'status-badge paused';
+        if (elStatusText) elStatusText.textContent = 'EXPIRED';
+        if (elStatusDot) {
+            elStatusDot.style.background = '#ff4444';
+            elStatusDot.style.boxShadow = '0 0 8px #ff4444';
+        }
+        if (btnToggle) {
+            btnToggle.className = 'action-btn btn-resume';
+            if (btnToggleIcon) btnToggleIcon.innerHTML = SVGS.play;
+            if (btnToggleText) btnToggleText.textContent = 'Login';
+        }
+    } else if (isRunning) {
+        if (elStatusBadge) elStatusBadge.className = 'status-badge';
+        if (elStatusText) elStatusText.textContent = 'RUNNING';
+        if (elStatusDot) {
+            elStatusDot.style.background = '#00ff88';
+            elStatusDot.style.boxShadow = '0 0 8px #00ff88';
+        }
+        if (btnToggle) {
+            btnToggle.className = 'action-btn btn-pause';
+            if (btnToggleIcon) btnToggleIcon.innerHTML = SVGS.pause;
+            if (btnToggleText) btnToggleText.textContent = 'Jeda';
+        }
+    } else {
+        if (elStatusBadge) elStatusBadge.className = 'status-badge paused';
+        if (elStatusText) elStatusText.textContent = 'PAUSED';
+        if (elStatusDot) {
+            elStatusDot.style.background = '#ff4757';
+            elStatusDot.style.boxShadow = '0 0 8px #ff4757';
+        }
+        if (btnToggle) {
+            btnToggle.className = 'action-btn btn-resume';
+            if (btnToggleIcon) btnToggleIcon.innerHTML = SVGS.play;
+            if (btnToggleText) btnToggleText.textContent = 'Lanjut';
         }
     }
 
-    // 2. Energy
-    elEnergyVal.textContent = `${currentE}/${maxE}`;
-    elEnergyTarget.textContent = `Target: ${threshold} EN`;
-    elBarFill.style.width = `${pct}%`;
+    // 0. Circuit Breaker Warning
+    if (elCbBanner) {
+        if (currentStatus.circuitBreakerActive) {
+            elCbBanner.style.display = 'block';
+            elCbBanner.textContent = `Pemeriksaan keamanan aktif (${currentStatus.circuitBreakerReason || 'Cloudflare/Maintenance'}). Worker dijeda.`;
+        } else {
+            elCbBanner.style.display = 'none';
+        }
+    }
 
-    // 3. Accurate Countdown Logic
+    // 2. Region & Buff
+    if (elRegionRow && elRegionText && elRegionBuff) {
+        if (currentStatus.regionName) {
+            elRegionRow.style.display = 'flex';
+            elRegionText.textContent = currentStatus.regionName;
+            elRegionBuff.textContent = (currentStatus.regionHealthBonusPercent ?? 0) > 0
+                ? `+${currentStatus.regionHealthBonusPercent}% Regen`
+                : 'Normal (1.0x)';
+        } else {
+            elRegionRow.style.display = 'flex';
+            elRegionText.textContent = 'Wilayah game';
+            elRegionBuff.textContent = 'Normal (1.0x)';
+        }
+    }
+
+    // 3. Server Time (UTC) & Daily Reset Countdown
+    const nowUtc = new Date();
+    const utcH = String(nowUtc.getUTCHours()).padStart(2, '0');
+    const utcM = String(nowUtc.getUTCMinutes()).padStart(2, '0');
+    const utcS = String(nowUtc.getUTCSeconds()).padStart(2, '0');
+    if (elUtcTime) elUtcTime.textContent = `${utcH}:${utcM}:${utcS} UTC`;
+    const minsToReset = (23 - nowUtc.getUTCHours()) * 60 + (59 - nowUtc.getUTCMinutes());
+    const isFlush = Boolean(currentStatus.isEnergyFlushActive || (nowUtc.getUTCHours() === 23 && nowUtc.getUTCMinutes() >= 15));
+    if (elFlushBadge) elFlushBadge.style.display = isFlush ? 'inline-block' : 'none';
+
+    if (elUtcReset) {
+        const resetH = Math.floor(minsToReset / 60);
+        const resetM = minsToReset % 60;
+        elUtcReset.textContent = `Reset: ${resetH}j ${resetM}m`;
+        elUtcReset.title = `Reset harian server (00:00 UTC) dalam ${resetH} jam ${resetM} menit`;
+    }
+
+    // 3.5. Food Slots Tracker
+    const foodEaten = Math.max(0, Math.min(10, currentStatus.foodEatenToday || 0));
+    const foodLeft = 10 - foodEaten;
+    if (elFoodVal) elFoodVal.textContent = `${foodEaten}/10`;
+    if (elFoodStatus) {
+        if (foodLeft === 0) {
+            elFoodStatus.textContent = 'Kuota habis';
+            elFoodStatus.style.color = '#10b981';
+        } else if (minsToReset <= 240) {
+            elFoodStatus.textContent = `Sisa ${foodLeft} slot!`;
+            elFoodStatus.style.color = '#f59e0b';
+        } else {
+            elFoodStatus.textContent = `${foodLeft} slot tersisa`;
+            elFoodStatus.style.color = '#94a3b8';
+        }
+    }
+
+    // 4. Energy Card
+    if (elEnergyVal) elEnergyVal.textContent = `${currentE}/${maxE}`;
+    if (elBarFill) elBarFill.style.width = `${pct}%`;
+    if (elFullEnergy) elFullEnergy.textContent = getTimeToFullEnergy(currentE, maxE, currentStatus.regenRate);
+
+    // 5. Accurate Countdown Logic
     const now = Date.now();
     let remaining = (currentStatus.nextWorkTimestamp || 0) - now;
     if (!currentStatus.nextWorkTimestamp && currentE < threshold) {
-        remaining = Math.max(1, threshold - currentE) * 60000;
+        const rate = currentStatus.regenRate || 1.0;
+        remaining = Math.max(1, (threshold - currentE) / rate) * 60000;
     }
 
+    let countdownText = 'Menunggu...';
+    let countdownColor = '#00d9ff';
+
     if (isExpired) {
-        elNextWork.textContent = 'Token Kadaluarsa';
-        elNextWork.style.color = '#ff4444';
-        elNextWork.title = '';
+        countdownText = 'Kadaluarsa';
+        countdownColor = '#ff4444';
     } else if (!isRunning) {
-        elNextWork.textContent = 'Dijeda';
-        elNextWork.style.color = '#ff6b6b';
-        elNextWork.title = '';
-    } else if (_isSleepTime(currentConfig)) {
-        elNextWork.textContent = 'Jam Istirahat';
-        elNextWork.style.color = '#a0a0b0';
-        elNextWork.title = '';
-    } else if (currentE >= threshold) {
-        elNextWork.textContent = 'Siap bekerja';
-        elNextWork.style.color = '#00ff88';
-        elNextWork.title = 'Energi sudah mencapai target. Siap bekerja.';
+        countdownText = 'Dijeda';
+        countdownColor = '#ff6b6b';
+    } else if (isSleeping) {
+        countdownText = 'Istirahat';
+        countdownColor = '#94a3b8';
+    } else if (isReadyToWork) {
+        countdownText = isFlush ? 'Flush!' : 'Siap Kerja';
+        countdownColor = '#00ff88';
     } else if (remaining > 0) {
         const sec = Math.ceil(remaining / 1000);
         const m = Math.floor(sec / 60);
         const s = sec % 60;
-        elNextWork.textContent = `${m}m ${String(s).padStart(2, '0')}s`;
-        elNextWork.style.color = '#00d9ff';
+        countdownText = `${m}m ${String(s).padStart(2, '0')}s`;
+        countdownColor = '#38bdf8';
+    }
+
+    if (elNextWork) {
+        elNextWork.textContent = countdownText;
+        elNextWork.style.color = countdownColor;
         if (currentStatus.nextWorkTimestamp && currentStatus.nextWorkTimestamp > now) {
             const d = new Date(currentStatus.nextWorkTimestamp);
             const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
             elNextWork.title = `Estimasi kerja pukul ${timeStr} WIB`;
+        } else {
+            elNextWork.title = '';
         }
-    } else {
-        elNextWork.textContent = 'Menunggu energi...';
-        elNextWork.style.color = '#ffaa00';
-        elNextWork.title = '';
     }
 
-    // 4. Counters
-    elWorkToday.textContent = `${currentStatus.workToday ?? 0}x`;
-    elXpToday.textContent   = `+${currentStatus.xpToday ?? 0} XP`;
-    elLastWork.textContent  = currentStatus.lastWorkTime || '--:--';
-
-    // 5. Token
-    if (isExpired) {
-        elTokenStatus.textContent = 'EXPIRED';
-        elTokenStatus.className   = 'stat-val token-bad';
-    } else if (currentStatus.hasToken) {
-        elTokenStatus.textContent = 'VALID';
-        elTokenStatus.className   = 'stat-val token-ok';
-    } else {
-        elTokenStatus.textContent = 'NOT FOUND';
-        elTokenStatus.className   = 'stat-val token-bad';
+    // 6. Focus Auto Work Status Card
+    if (elEnergyTarget) elEnergyTarget.textContent = String(threshold);
+    if (elShiftCountdown) {
+        elShiftCountdown.textContent = countdownText;
+        elShiftCountdown.style.color = countdownColor;
     }
 
-    // 6. Action button hints
-    if (isExpired) {
-        btnOpen.textContent = 'Buka & Login Game';
-        btnOpen.style.borderColor = 'rgba(255, 68, 68, 0.4)';
-    } else {
-        btnOpen.textContent = 'Buka Tab Parlamentum';
-        btnOpen.style.borderColor = '';
+    if (elModeTitle && elModeIcon) {
+        if (isExpired) {
+            elModeTitle.textContent = 'Auto Kerja: EXPIRED';
+            elModeTitle.style.color = '#ff4444';
+            elModeIcon.innerHTML = SVGS.shield;
+            elModeIcon.style.color = '#ff4444';
+        } else if (!isRunning) {
+            elModeTitle.textContent = 'Auto Kerja: DIJEDA';
+            elModeTitle.style.color = '#ff4757';
+            elModeIcon.innerHTML = SVGS.pause;
+            elModeIcon.style.color = '#ff4757';
+        } else if (isSleeping) {
+            elModeTitle.textContent = 'Auto Kerja: ISTIRAHAT';
+            elModeTitle.style.color = '#94a3b8';
+            elModeIcon.innerHTML = SVGS.clock;
+            elModeIcon.style.color = '#94a3b8';
+        } else {
+            elModeTitle.textContent = 'Auto Kerja: AKTIF';
+            elModeTitle.style.color = '#00ff88';
+            elModeIcon.innerHTML = SVGS.zap;
+            elModeIcon.style.color = '#00ff88';
+        }
     }
 
-    // 7. Last Activity Log
-    if (elLastLog) {
-        const logMsg = currentStatus.lastLogMessage || 'Auto Worker siap beroperasi.';
-        elLastLog.textContent = logMsg;
-        elLastLog.title = logMsg;
+    // 7. Auth Session Row
+    if (elTokenStatus) {
+        if (isExpired) {
+            elTokenStatus.textContent = 'EXPIRED';
+            elTokenStatus.style.color = '#ff4444';
+        } else if (currentStatus.hasToken) {
+            elTokenStatus.textContent = 'VALID';
+            elTokenStatus.style.color = '#00ff88';
+        } else {
+            elTokenStatus.textContent = 'NOT FOUND';
+            elTokenStatus.style.color = '#ffaa00';
+        }
+    }
+    if (elTokenExpiry) {
+        elTokenExpiry.textContent = getTimeUntilExpiry(currentStatus.tokenExpiry);
+    }
+
+    // 8. Open link text
+    if (btnOpen) {
+        const btnOpenText = document.getElementById('btn-open-text');
+        if (btnOpenText) {
+            btnOpenText.textContent = isExpired ? 'Buka & Login Game' : 'Buka Tab Parlamentum';
+        }
     }
 }
 
@@ -210,11 +368,11 @@ function renderUI() {
 function checkGameTab() {
     chrome.tabs.query({ url: '*://parlamentum.org/*' }, tabs => {
         if (tabs && tabs.length > 0) {
-            elTabDot.className = 'footer-dot online';
-            elTabText.textContent = `Tab game aktif (${tabs.length} tab)`;
+            if (elTabDot) elTabDot.className = 'footer-dot online';
+            if (elTabText) elTabText.textContent = `Tab game aktif (${tabs.length} tab)`;
         } else {
-            elTabDot.className = 'footer-dot';
-            elTabText.textContent = 'Background worker aktif';
+            if (elTabDot) elTabDot.className = 'footer-dot';
+            if (elTabText) elTabText.textContent = 'Background worker aktif';
         }
     });
 }
@@ -229,7 +387,11 @@ function loadData() {
             Object.assign(currentConfig, parseConfig(res.aw_config));
         }
         if (Array.isArray(res.aw_recent_logs)) {
-            currentLogs = res.aw_recent_logs;
+            // Clean out old repetitive spam logs if present
+            currentLogs = res.aw_recent_logs.filter(e => !/^Energi belum cukup \(\d+\/\d+\)/i.test(e.message || ''));
+            if (currentLogs.length !== res.aw_recent_logs.length) {
+                chrome.storage.local.set({ aw_recent_logs: currentLogs });
+            }
         }
         renderUI();
         renderLogList();
@@ -297,7 +459,7 @@ setInterval(() => {
 // ── Event Handlers ──────────────────────────────────────────────────────────
 
 // 1. Toggle Run / Pause
-btnToggle.addEventListener('click', () => {
+btnToggle?.addEventListener('click', () => {
     const newRunning = !currentStatus.running;
     currentStatus.running = newRunning;
     renderUI();
@@ -319,7 +481,7 @@ btnToggle.addEventListener('click', () => {
 });
 
 // 2. Manual Work Now
-btnWork.addEventListener('click', () => {
+btnWork?.addEventListener('click', () => {
     const isExpired = Boolean(
         currentStatus.tokenExpired ||
         currentStatus.pausedForToken ||
@@ -328,64 +490,56 @@ btnWork.addEventListener('click', () => {
     );
 
     if (isExpired) {
-        btnWork.textContent = 'Token Kadaluarsa! Login Ulang';
+        if (btnWorkText) btnWorkText.textContent = 'Token Expired!';
         btnWork.style.background = 'linear-gradient(135deg, #ef4444, #b91c1c)';
-        btnWork.style.color = '#fff';
         setTimeout(() => {
-            btnWork.textContent = 'Kerja Sekarang';
+            if (btnWorkText) btnWorkText.textContent = 'Kerja';
             btnWork.style.background = '';
-            btnWork.style.color = '';
         }, 2500);
         return;
     }
 
     btnWork.disabled = true;
-    const origText = 'Kerja Sekarang';
-    btnWork.textContent = 'Mengirim shift kerja...';
+    if (btnWorkText) btnWorkText.textContent = 'Kirim...';
 
     chrome.runtime.sendMessage({
         type: 'POPUP_TO_TAB',
         action: 'workNow'
     }, res => {
         if (res && res.ok) {
-            btnWork.textContent = 'Shift berhasil!';
+            if (btnWorkText) btnWorkText.textContent = 'Sukses!';
             btnWork.style.background = 'linear-gradient(135deg, #10b981, #059669)';
-            btnWork.style.color = '#fff';
             setTimeout(() => loadData(), 500);
         } else {
             let err = 'Gagal';
             if (res?.error === 'token_expired' || res?.error === 'no_token') {
-                err = 'Token Kadaluarsa! Login Ulang';
+                err = 'Token Expired';
             } else if (res?.error === 'insufficient_energy') {
-                err = 'Energi belum cukup!';
+                err = 'Energi Kurang';
             } else if (res?.error === 'busy') {
-                err = 'Sedang bekerja...';
+                err = 'Sedang Kerja';
             } else if (res?.error === 'waiting') {
-                err = 'Menunggu giliran...';
+                err = 'Menunggu...';
             } else if (res?.error === 'region_mismatch') {
-                err = 'Lokasi wilayah tidak cocok!';
+                err = 'Lokasi Beda';
             } else if (res?.message) {
-                err = res.message.slice(0, 32);
-            } else {
-                err = `Gagal (${res?.error || 'timeout'})`;
+                err = res.message.slice(0, 16);
             }
-            btnWork.textContent = err;
+            if (btnWorkText) btnWorkText.textContent = err;
             btnWork.style.background = 'linear-gradient(135deg, #ef4444, #b91c1c)';
-            btnWork.style.color = '#fff';
             setTimeout(() => loadData(), 400);
         }
         setTimeout(() => {
             btnWork.disabled = false;
-            btnWork.textContent = origText;
+            if (btnWorkText) btnWorkText.textContent = 'Kerja';
             btnWork.style.background = '';
-            btnWork.style.color = '';
             loadData();
         }, 2200);
     });
 });
 
 // 3. Open or focus Parlamentum tab
-btnOpen.addEventListener('click', () => {
+btnOpen?.addEventListener('click', () => {
     chrome.tabs.query({ url: '*://parlamentum.org/*' }, tabs => {
         if (tabs && tabs.length > 0) {
             const target = tabs.find(t => t.active) || tabs[0];
@@ -423,14 +577,18 @@ function renderLogList() {
         const typeClass = entry.type || 'info';
         row.className = `log-row ${typeClass}`;
 
+        const dot = document.createElement('span');
+        dot.className = 'log-dot';
+
         const timeSpan = document.createElement('span');
         timeSpan.className = 'log-time';
         timeSpan.textContent = `[${entry.time || '--:--'}]`;
 
         const msgSpan = document.createElement('span');
+        msgSpan.className = 'log-msg';
         msgSpan.textContent = entry.message || '';
 
-        row.append(timeSpan, msgSpan);
+        row.append(dot, timeSpan, msgSpan);
         return row;
     }));
 }
@@ -444,7 +602,7 @@ function openLogModal() {
             if (activeTab?.id) {
                 chrome.tabs.sendMessage(activeTab.id, { type: 'POPUP_COMMAND', action: 'getLogs' }, response => {
                     if (!chrome.runtime.lastError && response?.ok && Array.isArray(response?.logs)) {
-                        currentLogs = response.logs;
+                        currentLogs = response.logs.filter(e => !/^Energi belum cukup \(\d+\/\d+\)/i.test(e.message || ''));
                         renderLogList();
                     }
                 });
@@ -459,10 +617,6 @@ function closeLogModal() {
     }
 }
 
-elLastLogBox?.addEventListener('click', () => {
-    openLogModal();
-});
-
 btnOpenLog?.addEventListener('click', e => {
     e.stopPropagation();
     openLogModal();
@@ -470,9 +624,14 @@ btnOpenLog?.addEventListener('click', e => {
 
 btnCloseLog?.addEventListener('click', closeLogModal);
 
-logFilterType?.addEventListener('change', e => {
-    logFilter = e.target.value;
-    renderLogList();
+// Filter Pills setup
+document.querySelectorAll('.log-pill').forEach(pill => {
+    pill.addEventListener('click', () => {
+        document.querySelectorAll('.log-pill').forEach(p => p.classList.remove('active'));
+        pill.classList.add('active');
+        logFilter = pill.getAttribute('data-type') || 'all';
+        renderLogList();
+    });
 });
 
 logFilterText?.addEventListener('input', e => {
@@ -491,5 +650,37 @@ btnClearLogs?.addEventListener('click', () => {
     });
 });
 
-// Init
+// Food Quick Adjustment Controls
+const btnFoodDec = document.getElementById('popup-food-dec');
+const btnFoodInc = document.getElementById('popup-food-inc');
+const btnFoodMax = document.getElementById('popup-food-max');
+
+function setPopupFood(val) {
+    const food = Math.max(0, Math.min(10, val));
+    currentStatus.foodEatenToday = food;
+    renderUI();
+    chrome.storage.local.set({ aw_foodEatenToday: food.toString() });
+    chrome.tabs.query({ url: '*://parlamentum.org/*' }, tabs => {
+        tabs?.forEach(t => {
+            chrome.tabs.sendMessage(t.id, { type: 'POPUP_COMMAND', action: 'setFoodCount', value: food }).catch(() => {});
+        });
+    });
+}
+
+btnFoodDec?.addEventListener('click', e => {
+    e.stopPropagation();
+    setPopupFood((currentStatus.foodEatenToday || 0) - 1);
+});
+
+btnFoodInc?.addEventListener('click', e => {
+    e.stopPropagation();
+    setPopupFood((currentStatus.foodEatenToday || 0) + 1);
+});
+
+btnFoodMax?.addEventListener('click', e => {
+    e.stopPropagation();
+    setPopupFood(10);
+});
+
+// Initial load
 loadData();

@@ -6,7 +6,7 @@
  * All logic is identical — only imports replace global variable references.
  */
 
-import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, patchPageVisualEnergy, getGameEnergyFullText } from '../energy.js';
+import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, patchPageVisualEnergy, getGameEnergyFullText, isEnergyFlushActive } from '../energy.js';
 import { getTimeUntilExpiry } from '../token.js';
 import { getValue, setValue } from '../storage.js';
 import { saveState, saveLiveStatus } from '../state.js';
@@ -201,7 +201,7 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     if (energy) {
         state.currentEnergy = energy.current;
         state.maxEnergy = energy.max;
-        if (state.domEnergyStale) {
+        if (state.domEnergyStale || !isDashboardPage()) {
             patchPageVisualEnergy(state.currentEnergy, state.maxEnergy);
         }
     }
@@ -330,11 +330,62 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
         el.style.background = dotColor;
         el.style.boxShadow  = `0 0 8px ${dotColor}`;
     });
+    // Live UTC Clock & Server Reset countdown
+    const nowUtc = new Date();
+    const utcH = String(nowUtc.getUTCHours()).padStart(2, '0');
+    const utcM = String(nowUtc.getUTCMinutes()).padStart(2, '0');
+    const utcS = String(nowUtc.getUTCSeconds()).padStart(2, '0');
+    const utcTimeStr = `${utcH}:${utcM}:${utcS} UTC`;
+    const minsToReset = (23 - nowUtc.getUTCHours()) * 60 + (59 - nowUtc.getUTCMinutes());
+    const resetH = Math.floor(minsToReset / 60);
+    const resetM = minsToReset % 60;
+    const resetStr = `Reset: ${resetH}j ${resetM}m`;
+    const isFlush = isEnergyFlushActive(CONFIG);
+
+    _patchEl('aw-utc-time', el => el.textContent = utcTimeStr);
+    _patchEl('aw-flush-badge', el => {
+        el.style.display = isFlush ? 'inline-block' : 'none';
+    });
+    _patchEl('aw-utc-reset', el => {
+        el.textContent = resetStr;
+        el.title = `Reset harian server (jatah 10 slot makanan harian & bonus) terjadi pukul 00:00 UTC (${resetH} jam ${resetM} menit lagi)`;
+    });
+
+    // Circuit Breaker Warning Banner
+    _patchEl('aw-circuit-breaker-banner', el => {
+        if (state.circuitBreakerActive) {
+            el.style.display = 'block';
+            el.textContent = `Pemeriksaan keamanan aktif (${state.circuitBreakerReason || 'Cloudflare/Maintenance'}). Worker dijeda.`;
+        } else {
+            el.style.display = 'none';
+        }
+    });
+
+    // Daily Food Slot Tracker
+    const foodEaten = Math.max(0, Math.min(10, state.foodEatenToday || 0));
+    const foodLeft = 10 - foodEaten;
+    _patchEl('aw-food-slot-text', el => {
+        el.textContent = `${foodEaten}/10`;
+    });
+    _patchEl('aw-food-reminder', el => {
+        if (foodLeft === 0) {
+            el.textContent = 'Kuota habis';
+            el.style.color = '#10b981';
+        } else if (minsToReset <= 240) { // < 4 jam ke reset UTC
+            el.textContent = `Sisa ${foodLeft} slot!`;
+            el.style.color = '#f59e0b';
+        } else {
+            el.textContent = `${foodLeft} slot tersisa`;
+            el.style.color = '#94a3b8';
+        }
+    });
+
     _patchEl('aw-pill-container', el => {
         const statusText = state.workResultUncertain
             ? 'Hasil kerja belum pasti'
             : (state.running ? 'Sedang Berjalan' : 'Dijeda');
-        el.title = `Auto Worker: ${statusText}\nEnergi: ${state.currentEnergy}/${state.maxEnergy}\nGiliran: ${liveCountdown}\n\n(Seret untuk geser • Klik 2x untuk perbesar)`;
+        const flushNote = isFlush ? ' • [JAM EMAS UTC]' : '';
+        el.title = `Auto Worker: ${statusText}${flushNote}\nEnergi: ${state.currentEnergy}/${state.maxEnergy}\nGiliran: ${liveCountdown}\nWaktu Server: ${utcTimeStr} (${resetStr})\nMakanan: ${foodEaten}/10 slot\n\n(Seret untuk geser • Klik 2x untuk perbesar)`;
     });
 
     // Clock time tooltips (Hover to see exact time)
@@ -410,7 +461,7 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     _patchEl('aw-toggle',   el => el.disabled = blocked);
     _patchEl('aw-pill-toggle', el => el.disabled = blocked);
 
-    if (!state.tabLockManaged || state.isTabLockOwner || !document.hidden) {
+    if (!state.tabLockManaged || state.isTabLockOwner || (isDashboardPage() && !document.hidden)) {
         saveLiveStatus(state, CONFIG);
     }
 }
@@ -560,6 +611,9 @@ function _buildPanelHTML(state, CONFIG) {
                 </div>
             </div>
             <div id="aw-body" style="padding: 12px; display: block;">
+                <div id="aw-circuit-breaker-banner" style="display:${state.circuitBreakerActive ? 'block' : 'none'};margin-bottom:10px;padding:8px 10px;background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.4);border-radius:6px;color:#fca5a5;font-size:11px;line-height:1.4;text-align:center;font-weight:600;">
+                    Pemeriksaan keamanan aktif (${state.circuitBreakerReason || 'Cloudflare/Maintenance'}). Worker dijeda.
+                </div>
                 <div id="aw-uncertain-banner" style="display:${state.workResultUncertain ? 'block' : 'none'};margin-bottom:10px;padding:9px;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.55);border-radius:6px;color:#ffb3b3;font-size:11px;line-height:1.4;">
                     <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#ff7777;margin-bottom:4px;">
                         <span style="display:flex;align-items:center;">${ICONS.alert}</span> Hasil kerja belum pasti
@@ -593,6 +647,50 @@ function _buildPanelHTML(state, CONFIG) {
                         font-size: 9.5px;
                         white-space: nowrap;
                     ">${state.regionHealthBonusPercent ? `+${state.regionHealthBonusPercent}% Regen` : 'Normal (1.0x)'}</span>
+                </div>
+
+                <!-- Server Time (UTC) & Daily Reset Bar -->
+                <div id="aw-utc-bar" style="
+                    display: flex; align-items: center; justify-content: space-between;
+                    background: rgba(255, 255, 255, 0.025);
+                    border: 1px solid rgba(255, 255, 255, 0.06);
+                    border-radius: 7px;
+                    padding: 5px 9px;
+                    margin-bottom: 9px;
+                    font-size: 10.5px;
+                ">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.clock}</span>
+                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">Waktu Server:</span>
+                        <span id="aw-utc-time" style="color:#38bdf8;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;">00:00:00 UTC</span>
+                        <span id="aw-flush-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:0 5px;font-size:9px;font-weight:700;">JAM EMAS</span>
+                    </div>
+                    <span id="aw-utc-reset" style="font-size:9.5px;color:#718096;font-weight:500;" title="Reset harian server (jatah 10 slot makanan & bonus) terjadi pada pukul 00:00 UTC">Reset: --j --m</span>
+                </div>
+
+                <!-- Daily Food Slots Bar -->
+                <div id="aw-food-bar" style="
+                    display: flex; align-items: center; justify-content: space-between;
+                    background: rgba(255, 255, 255, 0.025);
+                    border: 1px solid rgba(255, 255, 255, 0.05);
+                    border-radius: 7px;
+                    padding: 5px 9px;
+                    margin-bottom: 9px;
+                    font-size: 10.5px;
+                ">
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span style="color:#f59e0b;display:flex;align-items:center;">${ICONS.utensils}</span>
+                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">Slot Makanan:</span>
+                        <span id="aw-food-slot-text" style="color:#f59e0b;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;">${state.foodEatenToday || 0}/10</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:6px;">
+                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;">${10 - (state.foodEatenToday || 0)} slot tersisa</span>
+                        <div style="display:inline-flex;align-items:center;gap:2px;">
+                            <button id="aw-food-dec" type="button" title="Kurangi 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">-</button>
+                            <button id="aw-food-inc" type="button" title="Tambah 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">+</button>
+                            <button id="aw-food-max" type="button" title="Set langsung kuota penuh (10/10)" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Penuh</button>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Energy Card -->
@@ -887,6 +985,36 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
 
     workNowBtn?.addEventListener('click', () => { ctx.log('Manual work triggered!', 'info'); ctx.doWork?.(true); });
     logsBtn?.addEventListener('click', () => ctx.openLogViewer?.());
+
+    // Food quota quick adjustment handlers
+    const foodDecBtn = document.getElementById('aw-food-dec');
+    const foodIncBtn = document.getElementById('aw-food-inc');
+    const foodMaxBtn = document.getElementById('aw-food-max');
+
+    foodDecBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.foodEatenToday = Math.max(0, (state.foodEatenToday || 0) - 1);
+        setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+        saveLiveStatus(state, CONFIG, true);
+        ctx.updatePanel?.();
+    });
+
+    foodIncBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.foodEatenToday = Math.min(10, (state.foodEatenToday || 0) + 1);
+        setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+        saveLiveStatus(state, CONFIG, true);
+        ctx.updatePanel?.();
+    });
+
+    foodMaxBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        state.foodEatenToday = 10;
+        setValue('aw_foodEatenToday', '10');
+        saveLiveStatus(state, CONFIG, true);
+        ctx.log('Slot makanan harian disetel penuh (10/10). Kuota tercapai.', 'info');
+        ctx.updatePanel?.();
+    });
 
     confirmBtn?.addEventListener('click', () => {
         if (!state.workResultUncertain || !state.isTabLockOwner) return;

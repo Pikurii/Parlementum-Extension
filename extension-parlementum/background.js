@@ -271,7 +271,9 @@ async function doBackgroundWork(isManual = false) {
             status.totalWorkXP   = (status.totalWorkXP || 0) + xpGained;
             status.lastWorkTime  = nowStr;
             status.lastWorkTimestamp = Date.now();
-            status.lastLogMessage = `[${nowStr}] Shift sukses (Background): +${xpGained} XP | Sisa: ${status.currentEnergy} EN`;
+            const units = Number(resData?.workerUnits) || Number(resData?.produced) || 0;
+            const unitsPart = units > 0 ? ` | +${units} unit` : '';
+            status.lastLogMessage = `[${nowStr}] Shift sukses (Background): +${xpGained} XP${unitsPart}`;
             appendBackgroundLog(status.lastLogMessage, 'success');
             status.updatedAt     = Date.now();
             const neededMs = Math.max(1, (config.energyThreshold || 90) - status.currentEnergy) * 60000;
@@ -323,7 +325,7 @@ async function doBackgroundWork(isManual = false) {
             if (config.sendNotification !== false) {
                 showDesktopNotification({
                     title: 'Parlamentum Auto Worker',
-                    message: `Shift sukses: +${xpGained} XP (Sisa: ${status.currentEnergy} EN)`,
+                    message: `Shift sukses: +${xpGained} XP${unitsPart}`,
                     priority: 1
                 });
             }
@@ -592,8 +594,15 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
                 return;
             }
 
-            // Tabs are open and active: tab is the primary executor via WAKE_WORKER.
-            // If tab responded, do not double-fire background work.
+            // Tabs are open, but NONE of them executed work (e.g. background tab throttling or sleeping tab).
+            // If energy is already at or above threshold, execute the shift directly via Service Worker!
+            const curEnergy = Number(status.currentEnergy);
+            if (Number.isFinite(curEnergy) && curEnergy >= threshold) {
+                console.log('[Background Alarm] Tab terbuka tetapi tidak mengeksekusi shift (kemungkinan background throttling). Menjalankan via Background Worker...');
+                await doBackgroundWork(false);
+                return;
+            }
+
             return;
         }
 

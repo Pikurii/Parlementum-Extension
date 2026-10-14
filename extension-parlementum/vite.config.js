@@ -18,8 +18,8 @@ export default defineConfig({
                 name: 'ParlementumAW'
             }
         },
-        sourcemap: 'inline', // Useful for debugging in DevTools
+        sourcemap: false,
         target: 'chrome114',
-        minify: false, // Readable output for debugging; set true for production
+        minify: 'esbuild',
     }
 });

@@ -74,6 +74,11 @@ export function createInitialState(CONFIG, savedStartTime, hasUncertainWorkResul
         totalEnergySpent:          getStoredInteger('totalEnergySpent', 0),
         totalActualEnergySpent:    getStoredInteger('totalActualEnergySpent', 0),
         totalEstimatedEnergySpent: getStoredInteger('totalEstimatedEnergySpent', 0),
+
+        foodEatenToday:            getStoredInteger('aw_foodEatenToday', 0, 0, 10),
+        circuitBreakerActive:      false,
+        circuitBreakerReason:      '',
+        isEnergyFlushActive:       false,
     };
 }
 
@@ -152,6 +157,11 @@ export function getLiveStatusSummary(state, CONFIG = null) {
         regenRate: state.regenRate || 1.0,
         lastLogMessage: lastLog,
         isTabLockOwner: Boolean(state.isTabLockOwner),
+        foodEatenToday: state.foodEatenToday ?? 0,
+        maxFoodDaily: 10,
+        circuitBreakerActive: Boolean(state.circuitBreakerActive),
+        circuitBreakerReason: state.circuitBreakerReason || '',
+        isEnergyFlushActive: Boolean(state.isEnergyFlushActive),
         updatedAt: Date.now()
     };
 }
@@ -166,9 +176,15 @@ export function getLiveStatusSummary(state, CONFIG = null) {
 export function saveLiveStatus(state, CONFIG = null, force = false) {
     const summary = getLiveStatusSummary(state, CONFIG);
 
-    // Multi-tab protection: standby tabs must NOT overwrite leader's storage unless active in foreground or forced
-    if (!force && state.tabLockManaged && !state.isTabLockOwner && document.hidden) {
-        return summary;
+    // Multi-tab protection: standby tabs or non-dashboard tabs must NOT overwrite leader/dashboard's live status
+    if (!force && state.tabLockManaged) {
+        if (!state.isTabLockOwner) {
+            return summary;
+        }
+        const isDash = typeof window !== 'undefined' && (/^\/(dashboard(?:\/.*)?|$)/i.test(window.location.pathname || '') || window.location.pathname === '/');
+        if (!isDash && state.hasActiveDashboardTab) {
+            return summary;
+        }
     }
 
     const nextWorkBucket = Math.round((summary.nextWorkTimestamp || 0) / 3000);
@@ -192,6 +208,7 @@ export function reloadStateFromStorage(state, loadWorkHistory) {
     state.totalEnergySpent =          getStoredInteger('totalEnergySpent', 0);
     state.totalActualEnergySpent =    getStoredInteger('totalActualEnergySpent', 0);
     state.totalEstimatedEnergySpent = getStoredInteger('totalEstimatedEnergySpent', 0);
+    state.foodEatenToday = getStoredInteger('aw_foodEatenToday', 0, 0, 10);
     state.lastWorkDate = getValue('lastWorkDate', new Date().toDateString());
     state.lastWorkTime = getValue('lastWorkTime', 'Belum pernah');
     loadWorkHistory();

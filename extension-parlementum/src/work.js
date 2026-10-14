@@ -2,7 +2,7 @@
  * work.js — Core doWork() action: calls the Parlamentum API and updates state
  */
 
-import { getCurrentEnergy, getSyncedEnergy, getNextWorkDelay, isSleepTime, getMsUntilSleepEnd, patchPageVisualEnergy } from './energy.js';
+import { getCurrentEnergy, getSyncedEnergy, getNextWorkDelay, isSleepTime, getMsUntilSleepEnd, patchPageVisualEnergy, getEffectiveEnergyThreshold, isEnergyFlushActive } from './energy.js';
 import { getTokenFromStorage } from './token.js';
 import { saveState, saveLiveStatus } from './state.js';
 import { saveWorkHistory } from './history.js';
@@ -56,23 +56,39 @@ export async function doWork(ctx, manual = false) {
         return 'waiting';
     }
 
-    if (state.currentEnergy < 10 && manual) {
-        log(`Energi saat ini (${state.currentEnergy}/${state.maxEnergy} EN) belum cukup! Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
-        return 'waiting';
-    }
+    const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
+    const isFlush = isEnergyFlushActive(CONFIG);
 
-    if (state.currentEnergy < CONFIG.energyThreshold && !manual) {
-        log(`Energi belum cukup (${state.currentEnergy}/${CONFIG.energyThreshold})`, 'warn');
-        state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
-        return 'waiting';
+    if (manual) {
+        if (state.currentEnergy < 10) {
+            log(`Energi saat ini (${state.currentEnergy}/${state.maxEnergy} EN) belum cukup! Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
+            return 'waiting';
+        }
+        if (state.currentEnergy < effectiveThreshold) {
+            log(`Energi belum mencapai target (${state.currentEnergy}/${state.maxEnergy} EN • Target: ${effectiveThreshold} EN).`, 'warn');
+            return 'waiting';
+        }
+    } else {
+        if (state.currentEnergy < effectiveThreshold) {
+            // Passive waiting in automated mode: do not pollute activity log with repeated warnings
+            state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
+            return 'waiting';
+        }
+        if (isFlush && state.currentEnergy >= 10 && (!state._lastLoggedFlushTime || Date.now() - state._lastLoggedFlushTime > 1800000)) {
+            state._lastLoggedFlushTime = Date.now();
+            log(`[Energy Flush 00:00 UTC] Jam emas aktif: Menguras sisa energi (${state.currentEnergy} EN) sebelum reset server.`, 'info');
+        }
     }
 
     const energyBefore = getCurrentEnergy() || energy;
 
-    // 1. Primary Work Method on Dashboard: Native Page Button Click
+    // 1. Primary Work Method: Native Page Button Click (ONLY when tab is in foreground)
     // Clicking the game's actual button lets React handle animations, XP toast, navbar,
-    // progress bar, and component states natively with zero DOM glitches or virtual DOM desync!
-    const domBtn = _getDomWorkButton();
+    // progress bar, and component states natively when the user is actively viewing the page.
+    // When tab is hidden/backgrounded, React throttles synthetic events, so we bypass directly to API fetch!
+    const isTabForeground = typeof document !== 'undefined' && !document.hidden;
+    const domBtn = isTabForeground ? _getDomWorkButton() : null;
+
     if (domBtn && _isButtonUsable(domBtn)) {
         state.workTriggeredViaDom = true;
         state.workInFlight = true;
@@ -91,7 +107,7 @@ export async function doWork(ctx, manual = false) {
             setTimeout(() => {
                 window.removeEventListener('message', onMsg);
                 resolve(null);
-            }, 6000);
+            }, 4000);
         });
 
         _triggerDomWorkClick(domBtn);
@@ -99,15 +115,27 @@ export async function doWork(ctx, manual = false) {
             log('Shift kerja manual dikirim via tombol game...', 'info');
         }
 
-        await workCompletionPromise;
+        const res = await workCompletionPromise;
         state.workInFlight = false;
         state.workTriggeredViaDom = false;
-        state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
-        updatePanel?.();
-        return 'worked';
+
+        if (res && res.type === 'WORK_SUCCESS') {
+            state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
+            updatePanel?.();
+            return 'worked';
+        }
+        if (res && res.type === 'WORK_REJECTED') {
+            updatePanel?.();
+            return 'waiting';
+        }
+
+        // If timed out (res === null), the DOM click was delayed/ignored by React scheduler.
+        // Seamlessly proceed to Method 2 (Direct API fetch) instead of falsely reporting success!
+        log('Tombol game tidak merespon (tab background/idle). Beralih ke direct API fetch...', 'info');
     }
 
-    // 2. Fallback Work Method (off-dashboard or button unavailable): Direct API fetch
+    // 2. Direct API Fetch (Background Tab & Resilient Fallback)
+    // 100% reliable in background tabs, unfocused windows, and off-dashboard pages
     state.workTriggeredViaDom = false;
     state.workInFlight = true;
     state.workInFlightAt = Date.now();
@@ -118,6 +146,12 @@ export async function doWork(ctx, manual = false) {
             getTokenFromStorage(state, (raw, src) => {
                 return ctx.handleNewToken(raw, src);
             });
+            if (!state.currentToken) {
+                const storedToken = getValue('aw_auth_token');
+                if (storedToken) {
+                    ctx.handleNewToken(storedToken, 'storage');
+                }
+            }
             if (!state.currentToken) {
                 log('Token tidak ditemukan! Pastikan sudah login di akun Parlementum.', 'error');
                 return 'retry';
@@ -215,8 +249,33 @@ function _isButtonUsable(btn) {
 function _triggerDomWorkClick(btn) {
     if (!btn) return false;
     try {
-        btn.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-        btn.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+        const rect = btn.getBoundingClientRect();
+        // Randomized click coordinates within button boundaries (35% to 65% area to avoid robotic center-only clicks)
+        const offsetX = Math.floor(rect.width * (0.35 + Math.random() * 0.3));
+        const offsetY = Math.floor(rect.height * (0.35 + Math.random() * 0.3));
+        const clientX = Math.round(rect.left + offsetX);
+        const clientY = Math.round(rect.top + offsetY);
+
+        const eventInit = {
+            bubbles: true,
+            cancelable: true,
+            view: window,
+            clientX,
+            clientY,
+            screenX: clientX + (window.screenX || 0),
+            screenY: clientY + (window.screenY || 0),
+            button: 0,
+            buttons: 1
+        };
+
+        if (typeof PointerEvent !== 'undefined') {
+            btn.dispatchEvent(new PointerEvent('pointerdown', eventInit));
+        }
+        btn.dispatchEvent(new MouseEvent('mousedown', eventInit));
+        if (typeof PointerEvent !== 'undefined') {
+            btn.dispatchEvent(new PointerEvent('pointerup', eventInit));
+        }
+        btn.dispatchEvent(new MouseEvent('mouseup', eventInit));
         btn.click();
         return true;
     } catch {
@@ -347,7 +406,7 @@ async function _handleSuccess(ctx, response, energy, energyBefore) {
 
     saveState(state);
     const unitsPart = units > 0 ? ` | +${units} unit` : '';
-    log(`Kerja sukses! +${xpGained} XP${unitsPart} | Sisa: ${state.currentEnergy}/${state.maxEnergy} EN`, 'success');
+    log(`Kerja sukses! +${xpGained} XP${unitsPart}`, 'success');
     playNotificationSound(CONFIG, 'success');
     sendNotification(CONFIG, 'Parlamentum', `Kerja sukses! +${xpGained} XP${unitsPart}`);
     state.nextWorkTimestamp = Date.now() + getNextWorkDelay(state, CONFIG);
