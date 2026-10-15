@@ -324,6 +324,14 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     _patchEl('aw-next-work',     el => {
         el.textContent = liveCountdown;
         el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
+        if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
+            const d = new Date(state.nextWorkTimestamp);
+            const h = String(d.getHours()).padStart(2, '0');
+            const m = String(d.getMinutes()).padStart(2, '0');
+            el.title = `Shift berikutnya diperkirakan pukul ${h}:${m} WIB`;
+        } else {
+            el.title = 'Energi target tercapai. Siap bekerja.';
+        }
     });
     _patchEl('aw-full-energy',   el => el.textContent  = getTimeToFullEnergy(state));
 
@@ -691,7 +699,7 @@ function _buildPanelHTML(state, CONFIG) {
                 </div>
 
                 <!-- Daily Food Slots Bar -->
-                <div id="aw-food-bar" style="
+                <div id="aw-food-bar" title="Jatah harian server Parlementum (10 slot). Otomatis bertambah saat makan roti di game dan di-reset setiap 00:00 UTC." style="
                     display: flex; align-items: center; justify-content: space-between;
                     background: rgba(255, 255, 255, 0.025);
                     border: 1px solid rgba(255, 255, 255, 0.05);

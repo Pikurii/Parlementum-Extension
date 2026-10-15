@@ -62,6 +62,11 @@ export function initInterceptorClient(state, CONFIG, ctx) {
                 break;
 
             case 'FOOD_CONSUMED': {
+                const now = Date.now();
+                if (state._lastFoodConsumedAt && (now - state._lastFoodConsumedAt < 1500)) {
+                    break;
+                }
+                state._lastFoodConsumedAt = now;
                 const maxF = CONFIG.maxFoodDaily || 10;
                 state.foodEatenToday = Math.min(maxF, (state.foodEatenToday || 0) + 1);
                 setValue('aw_foodEatenToday', state.foodEatenToday.toString());
