@@ -49,16 +49,40 @@ export function initInterceptorClient(state, CONFIG, ctx) {
 
             case 'FOOD_STATUS':
                 if (typeof msg.foodEatenToday === 'number') {
-                    state.foodEatenToday = Math.max(0, Math.min(10, Math.round(msg.foodEatenToday)));
+                    const maxF = CONFIG.maxFoodDaily || 10;
+                    state.foodEatenToday = Math.max(0, Math.min(maxF, Math.round(msg.foodEatenToday)));
                     setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                    try {
+                        const ch = new BroadcastChannel('aw_parlamentum_tabs');
+                        ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
+                        ch.close();
+                    } catch { /* ignore */ }
                     ctx?.updatePanel?.();
                 }
                 break;
 
-            case 'FOOD_CONSUMED':
-                state.foodEatenToday = Math.min(10, (state.foodEatenToday || 0) + 1);
+            case 'FOOD_CONSUMED': {
+                const maxF = CONFIG.maxFoodDaily || 10;
+                state.foodEatenToday = Math.min(maxF, (state.foodEatenToday || 0) + 1);
                 setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                try {
+                    const ch = new BroadcastChannel('aw_parlamentum_tabs');
+                    ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
+                    ch.close();
+                } catch { /* ignore */ }
+                ctx?.log?.(`Makan roti terdeteksi (+1): ${state.foodEatenToday}/${maxF} slot terpakai.`, 'info');
                 ctx?.updatePanel?.();
+                break;
+            }
+
+            case 'PREMIUM_STATUS':
+                if (msg.isPremium && CONFIG.maxFoodDaily !== 20) {
+                    CONFIG.maxFoodDaily = 20;
+                    setValue('aw_maxFoodDaily', '20');
+                    ctx?.saveConfig?.(CONFIG);
+                    ctx?.log?.('Akun Premium terdeteksi: Kuota makanan harian disesuaikan jadi 20 slot.', 'info');
+                    ctx?.updatePanel?.();
+                }
                 break;
 
             default:

@@ -362,16 +362,17 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     });
 
     // Daily Food Slot Tracker
-    const foodEaten = Math.max(0, Math.min(10, state.foodEatenToday || 0));
-    const foodLeft = 10 - foodEaten;
+    const maxFood = CONFIG.maxFoodDaily || state.maxFoodDaily || 10;
+    const foodEaten = Math.max(0, Math.min(maxFood, state.foodEatenToday || 0));
+    const foodLeft = Math.max(0, maxFood - foodEaten);
     _patchEl('aw-food-slot-text', el => {
-        el.textContent = `${foodEaten}/10`;
+        el.textContent = `${foodEaten}/${maxFood}`;
     });
     _patchEl('aw-food-reminder', el => {
         if (foodLeft === 0) {
             el.textContent = 'Kuota habis';
             el.style.color = '#10b981';
-        } else if (minsToReset <= 240) { // < 4 jam ke reset UTC
+        } else if (minsToReset <= 240 && CONFIG.foodResetReminderEnabled !== false) { // < 4 jam ke reset UTC
             el.textContent = `Sisa ${foodLeft} slot!`;
             el.style.color = '#f59e0b';
         } else {
@@ -385,7 +386,7 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
             ? 'Hasil kerja belum pasti'
             : (state.running ? 'Sedang Berjalan' : 'Dijeda');
         const flushNote = isFlush ? ' • [JAM EMAS UTC]' : '';
-        el.title = `Auto Worker: ${statusText}${flushNote}\nEnergi: ${state.currentEnergy}/${state.maxEnergy}\nGiliran: ${liveCountdown}\nWaktu Server: ${utcTimeStr} (${resetStr})\nMakanan: ${foodEaten}/10 slot\n\n(Seret untuk geser • Klik 2x untuk perbesar)`;
+        el.title = `Auto Worker: ${statusText}${flushNote}\nEnergi: ${state.currentEnergy}/${state.maxEnergy}\nGiliran: ${liveCountdown}\nWaktu Server: ${utcTimeStr} (${resetStr})\nMakanan: ${foodEaten}/${maxFood} slot\n\n(Seret untuk geser • Klik 2x untuk perbesar)`;
     });
 
     // Clock time tooltips (Hover to see exact time)
@@ -551,7 +552,7 @@ export function applyPanelMode(state, isMin) {
         }
     } else {
         // Prevent overflowing the right viewport edge when expanding
-        const maxX = window.innerWidth - 305;
+        const maxX = window.innerWidth - 335;
         if (state.panelX > maxX && maxX > 0) {
             state.panelX = Math.max(10, maxX);
             panel.style.left = state.panelX + 'px';
@@ -560,9 +561,9 @@ export function applyPanelMode(state, isMin) {
 
         if (fullContainer) fullContainer.style.display = 'block';
         if (pillContainer) pillContainer.style.display = 'none';
-        panel.style.width = '285px';
-        panel.style.minWidth = '285px';
-        panel.style.maxWidth = '295px';
+        panel.style.width = '315px';
+        panel.style.minWidth = '315px';
+        panel.style.maxWidth = '325px';
         panel.style.background = 'rgba(18, 22, 34, 0.92)';
         panel.style.backdropFilter = 'blur(14px)';
         panel.style.webkitBackdropFilter = 'blur(14px)';
@@ -655,17 +656,19 @@ function _buildPanelHTML(state, CONFIG) {
                     background: rgba(255, 255, 255, 0.025);
                     border: 1px solid rgba(255, 255, 255, 0.06);
                     border-radius: 7px;
-                    padding: 5px 9px;
+                    padding: 6px 10px;
                     margin-bottom: 9px;
                     font-size: 10.5px;
+                    white-space: nowrap;
+                    box-sizing: border-box;
                 ">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.clock}</span>
-                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">Waktu Server:</span>
-                        <span id="aw-utc-time" style="color:#38bdf8;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;">00:00:00 UTC</span>
-                        <span id="aw-flush-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:0 5px;font-size:9px;font-weight:700;">JAM EMAS</span>
+                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
+                        <span style="color:#38bdf8;display:flex;align-items:center;flex-shrink:0;">${ICONS.clock}</span>
+                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Waktu Server:</span>
+                        <span id="aw-utc-time" style="color:#38bdf8;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">00:00:00 UTC</span>
+                        <span id="aw-flush-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:0 5px;font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0;">JAM EMAS</span>
                     </div>
-                    <span id="aw-utc-reset" style="font-size:9.5px;color:#718096;font-weight:500;" title="Reset harian server (jatah 10 slot makanan & bonus) terjadi pada pukul 00:00 UTC">Reset: --j --m</span>
+                    <span id="aw-utc-reset" style="font-size:9.5px;color:#718096;font-weight:500;white-space:nowrap;flex-shrink:0;margin-left:auto;" title="Reset harian server (jatah makanan & bonus) terjadi pada pukul 00:00 UTC">Reset: --j --m</span>
                 </div>
 
                 <!-- Daily Food Slots Bar -->
@@ -674,21 +677,23 @@ function _buildPanelHTML(state, CONFIG) {
                     background: rgba(255, 255, 255, 0.025);
                     border: 1px solid rgba(255, 255, 255, 0.05);
                     border-radius: 7px;
-                    padding: 5px 9px;
+                    padding: 6px 10px;
                     margin-bottom: 9px;
                     font-size: 10.5px;
+                    white-space: nowrap;
+                    box-sizing: border-box;
                 ">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="color:#f59e0b;display:flex;align-items:center;">${ICONS.utensils}</span>
-                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;">Slot Makanan:</span>
-                        <span id="aw-food-slot-text" style="color:#f59e0b;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;">${state.foodEatenToday || 0}/10</span>
+                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
+                        <span style="color:#f59e0b;display:flex;align-items:center;flex-shrink:0;">${ICONS.utensils}</span>
+                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Slot Makanan:</span>
+                        <span id="aw-food-slot-text" style="color:#f59e0b;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">${state.foodEatenToday || 0}/${CONFIG.maxFoodDaily || 10}</span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;">${10 - (state.foodEatenToday || 0)} slot tersisa</span>
-                        <div style="display:inline-flex;align-items:center;gap:2px;">
+                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;margin-left:auto;">
+                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;white-space:nowrap;flex-shrink:0;">${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0)} slot tersisa</span>
+                        <div style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;">
                             <button id="aw-food-dec" type="button" title="Kurangi 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">-</button>
                             <button id="aw-food-inc" type="button" title="Tambah 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">+</button>
-                            <button id="aw-food-max" type="button" title="Set langsung kuota penuh (10/10)" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Penuh</button>
+                            <button id="aw-food-max" type="button" title="Set langsung kuota penuh" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Penuh</button>
                         </div>
                     </div>
                 </div>
@@ -991,28 +996,41 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
     const foodIncBtn = document.getElementById('aw-food-inc');
     const foodMaxBtn = document.getElementById('aw-food-max');
 
+    function _broadcastFoodUpdate(val) {
+        try {
+            const ch = new BroadcastChannel('aw_parlamentum_tabs');
+            ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: val, timestamp: Date.now() });
+            ch.close();
+        } catch { /* ignore */ }
+    }
+
     foodDecBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
         state.foodEatenToday = Math.max(0, (state.foodEatenToday || 0) - 1);
         setValue('aw_foodEatenToday', state.foodEatenToday.toString());
         saveLiveStatus(state, CONFIG, true);
+        _broadcastFoodUpdate(state.foodEatenToday);
         ctx.updatePanel?.();
     });
 
     foodIncBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.foodEatenToday = Math.min(10, (state.foodEatenToday || 0) + 1);
+        const maxFood = CONFIG.maxFoodDaily || state.maxFoodDaily || 10;
+        state.foodEatenToday = Math.min(maxFood, (state.foodEatenToday || 0) + 1);
         setValue('aw_foodEatenToday', state.foodEatenToday.toString());
         saveLiveStatus(state, CONFIG, true);
+        _broadcastFoodUpdate(state.foodEatenToday);
         ctx.updatePanel?.();
     });
 
     foodMaxBtn?.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.foodEatenToday = 10;
-        setValue('aw_foodEatenToday', '10');
+        const maxFood = CONFIG.maxFoodDaily || state.maxFoodDaily || 10;
+        state.foodEatenToday = maxFood;
+        setValue('aw_foodEatenToday', maxFood.toString());
         saveLiveStatus(state, CONFIG, true);
-        ctx.log('Slot makanan harian disetel penuh (10/10). Kuota tercapai.', 'info');
+        _broadcastFoodUpdate(maxFood);
+        ctx.log(`Slot makanan disetel penuh (${maxFood}/${maxFood}). Kuota tercapai.`, 'info');
         ctx.updatePanel?.();
     });
 

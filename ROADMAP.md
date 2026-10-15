@@ -1,10 +1,23 @@
 # Parlementum Auto Worker — Roadmap & Pending Tasks
 
-Dokumen ini mencatat fitur yang telah selesai diimplementasikan pada versi 5.11.0 serta daftar pekerjaan dan peningkatan yang masih dalam antrean (belum selesai / pending).
+Dokumen ini mencatat fitur yang telah selesai diimplementasikan pada versi 5.11.0 serta daftar peningkatan yang masih dalam antrean (pending).
 
 ---
 
 ## 1. Status Selesai (v5.11.0)
+
+- **Perbaikan Tampilan UI & Pencegahan Text Wrapping (Baru)**:
+  - Memperluas lebar panel dari 285px menjadi 315px (`min-width: 310px; max-width: 325px`) agar seluruh baris teks memiliki ruang napas proporsional.
+  - Memasang aturan `white-space: nowrap !important` dan `flex-shrink: 0` pada baris Waktu Server (`WAKTU SERVER: 00:00:00 UTC | Reset: --j --m`) dan baris Slot Makanan sehingga teks tidak akan pernah patah/menumpuk ke bawah (*wrapping*) lagi di layar peramban.
+
+- **Sinkronisasi Slot Makanan Lintas-Tab (Cross-Tab Food Sync) (Baru)**:
+  - Mengintegrasikan kuota makanan ke saluran `BroadcastChannel` (`aw_parlamentum_tabs`).
+  - Pembaruan slot makanan (baik lewat makan roti di game, deteksi pop-up, maupun tombol manual) kini langsung terkirim dan tersinkronisasi instan ke seluruh tab Parlementum yang sedang terbuka (Dashboard, Pasar, Pasar Global, Profil, dll.) dengan 0ms jeda.
+
+- **Dukungan Kuota Akun Premium (20 Slot) & Opsi di Pengaturan (Baru)**:
+  - Menyediakan pilihan konfigurasi di modal Pengaturan: `10 Slot (Regular)` atau `20 Slot (Premium)`.
+  - Auto-deteksi otomatis status Premium dari respon profil server game.
+  - Indikator slot makanan dinamis menyesuaikan batas kuota yang dipilih (`X/10` atau `X/20`).
 
 - **Energy Flush 00:00 UTC (Jam Emas)**:
   - Otomatis menurunkan threshold kerja 45 menit sebelum pergantian hari UTC (23:15 UTC) agar sisa energi tidak terbuang sia-sia sebelum reset server.
@@ -20,46 +33,26 @@ Dokumen ini mencatat fitur yang telah selesai diimplementasikan pada versi 5.11.
 - **Auto-Refresh Tab Higienis**:
   - Pembersihan memori otomatis setelah tab berjalan aktif lebih dari 12 jam (hanya dieksekusi saat energi < 20 EN dan countdown kerja masih > 20 menit) untuk mencegah memory leak browser saat ditinggal tidur/afk berhari-hari.
 
-- **Pelacak Kuota Makanan Harian (10 Slot Roti)**:
+- **Pelacak Kuota Makanan Harian & Tombol Cepat**:
   - Pelacakan kuota makanan harian di panel utama dan toolbar popup dengan hitungan mundur reset 00:00 UTC.
-  - Pemindai DOM aktif (MutationObserver) untuk menangkap notifikasi game *"Batas roti harian tercapai"* dan otomatis menyetel kuota ke `10/10 (Kuota habis)`.
-  - Interceptor respon jaringan untuk mendeteksi pesan batas kuota makanan dari API server.
-  - Tombol penyesuaian manual langsung pada panel dan popup: `[-]` (kurang 1), `[+]` (tambah 1), dan `[Penuh]` (set 10/10).
+  - Pemindai DOM aktif (MutationObserver) untuk menangkap notifikasi game *"Batas roti harian tercapai"* dan otomatis menyetel kuota ke batas maksimal.
+  - Interceptor request payload untuk mendeteksi konsumsi item roti secara real-time.
+  - Tombol penyesuaian manual langsung pada panel dan popup: `[-]` (kurang 1), `[+]` (tambah 1), dan `[Penuh]` (set kuota maksimal).
 
 ---
 
-## 2. Daftar Pekerjaan Yang Belum Selesai (Pending Tasks)
+## 2. Status Antrean & Pengujian Lanjutan
 
-Berikut adalah daftar fitur dan perbaikan yang masih perlu diselesaikan:
+Berikut adalah pengujian dan opsi opsional yang dapat dilakukan:
 
-### A. Deteksi Otomatis Real-Time Per Item Makan Roti (1 s/d 10)
-- **Status**: Sebagian (Pending endpoint API pasti).
-- **Kondisi Saat Ini**:
-  - Ekstensi mendeteksi batas penuh `10/10` via notifikasi pop-up game dan menyediakan tombol manual `[+]` / `[Penuh]`.
-  - Pola URL umum (`/eat`, `/food`, `/roti`, `/item/use`, `/inventory/use`) sudah dipasang di interceptor.
-- **Yang Belum Selesai**:
-  - Mengonfirmasi endpoint URL dan method HTTP pasti saat pemain mengklik tombol "Makan Roti" di layar inventori game (memerlukan pengecekan tab Network saat 1 kali makan roti dilakukan).
-  - Sinkronisasi instan penambahan counter +1 per roti yang berhasil dimakan sebelum mencapai kuota 10/10.
+### A. Pengujian Real-Time Makan Roti Hari Ini (0/10)
+- **Status**: Siap Diuji di Game.
+- **Kondisi**:
+  - Hari UTC telah berganti (`00:xx UTC`), slot makanan telah kembali kosong (`0/10`).
+  - Interceptor kini memantau URL (`/eat`, `/food`, `/roti`, `/bread`, `/item/use`, `/inventory/use`, `/consume`) dan payload request yang mengandung item roti.
+  - Pemain dapat langsung menguji makan 1 roti di game hari ini untuk melihat apakah kuota otomatis bertambah +1 dan tersinkronisasi di panel.
 
-### B. Dukungan Akun Premium (Kuota 20 Slot Makanan)
-- **Status**: Pending.
-- **Kondisi Saat Ini**:
-  - Notifikasi game menyatakan *"Premium menaikkan batas harian jadi 20"*.
-  - Ekstensi saat ini menerapkan batas standar 10 slot makanan.
-- **Yang Belum Selesai**:
-  - Membaca status keanggotaan Premium pemain dari respon profil API game.
-  - Opsi pengaturan manual di modal Settings untuk memilih kuota harian (10 slot untuk Regular / 20 slot untuk Premium).
-
-### C. Sinkronisasi Slot Makanan Lintas-Tab (Cross-Tab Food Sync)
-- **Status**: Pending.
-- **Kondisi Saat Ini**:
-  - `BroadcastChannel` (`aw_parlamentum_tabs`) menyinkronkan energi, shift kerja, dan status tab Dashboard.
-- **Yang Belum Selesai**:
-  - Menyertakan perubahan `foodEatenToday` ke dalam pesan `DASHBOARD_HEARTBEAT` agar ketika roti dimakan di tab Dashboard, tab lain (misalnya tab Pasar atau Pasar Global) langsung ter-update tanpa perlu reload.
-
-### D. Pengingat / Alarm Aktif Menjelang Reset 00:00 UTC
-- **Status**: Pending.
-- **Kondisi Saat Ini**:
-  - Teks sisa slot makanan berubah menjadi oranye jika sisa waktu menuju reset UTC < 4 jam.
-- **Yang Belum Selesai**:
-  - Menambahkan toggle notifikasi desktop atau audio pengingat opsional pada 1-2 jam sebelum 00:00 UTC jika pemain masih memiliki sisa slot makanan yang belum digunakan.
+### B. Opsi Alarm Audio Sisa Makanan Menjelang Reset
+- **Status**: Peringatan visual oranye sudah aktif (< 4 jam ke 00:00 UTC).
+- **Pengembangan Lanjutan**:
+  - Menambahkan suara notifikasi audio khusus jika sisa kuota makanan belum habis pada 1 jam sebelum server reset (23:00 UTC).

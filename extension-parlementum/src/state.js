@@ -75,7 +75,8 @@ export function createInitialState(CONFIG, savedStartTime, hasUncertainWorkResul
         totalActualEnergySpent:    getStoredInteger('totalActualEnergySpent', 0),
         totalEstimatedEnergySpent: getStoredInteger('totalEstimatedEnergySpent', 0),
 
-        foodEatenToday:            getStoredInteger('aw_foodEatenToday', 0, 0, 10),
+        foodEatenToday:            getStoredInteger('aw_foodEatenToday', 0, 0, 20),
+        maxFoodDaily:              getStoredInteger('aw_maxFoodDaily', 10, 10, 20),
         circuitBreakerActive:      false,
         circuitBreakerReason:      '',
         isEnergyFlushActive:       false,
@@ -158,7 +159,7 @@ export function getLiveStatusSummary(state, CONFIG = null) {
         lastLogMessage: lastLog,
         isTabLockOwner: Boolean(state.isTabLockOwner),
         foodEatenToday: state.foodEatenToday ?? 0,
-        maxFoodDaily: 10,
+        maxFoodDaily: CONFIG?.maxFoodDaily || state.maxFoodDaily || 10,
         circuitBreakerActive: Boolean(state.circuitBreakerActive),
         circuitBreakerReason: state.circuitBreakerReason || '',
         isEnergyFlushActive: Boolean(state.isEnergyFlushActive),
@@ -208,7 +209,8 @@ export function reloadStateFromStorage(state, loadWorkHistory) {
     state.totalEnergySpent =          getStoredInteger('totalEnergySpent', 0);
     state.totalActualEnergySpent =    getStoredInteger('totalActualEnergySpent', 0);
     state.totalEstimatedEnergySpent = getStoredInteger('totalEstimatedEnergySpent', 0);
-    state.foodEatenToday = getStoredInteger('aw_foodEatenToday', 0, 0, 10);
+    state.foodEatenToday = getStoredInteger('aw_foodEatenToday', 0, 0, 20);
+    state.maxFoodDaily = getStoredInteger('aw_maxFoodDaily', 10, 10, 20);
     state.lastWorkDate = getValue('lastWorkDate', new Date().toDateString());
     state.lastWorkTime = getValue('lastWorkTime', 'Belum pernah');
     loadWorkHistory();

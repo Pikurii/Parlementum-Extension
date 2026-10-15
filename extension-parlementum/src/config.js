@@ -31,6 +31,8 @@ export const DEFAULT_CONFIG = {
     autoReloadTabEnabled: true,
     circuitBreakerEnabled: true,
     foodReminderEnabled: true,
+    foodResetReminderEnabled: true,
+    maxFoodDaily: 10,
     sleepScheduleEnabled: false,
     sleepStartHour: 1,
     sleepEndHour: 6,
@@ -56,6 +58,7 @@ const NUMERIC_BOUNDS = {
     quietModeInterval:         [1000, 86400000],
     energyThreshold:           [10,   100],
     stealthJitterMaxSeconds:   [5,    120],
+    maxFoodDaily:              [10,   20],
     historyMaxDays:            [1,    365],
     sleepStartHour:            [0,    23],
     sleepEndHour:              [0,    23]

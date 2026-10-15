@@ -127,6 +127,10 @@
                 if (typeof p.foodEatenToday === 'number') foodEaten = p.foodEatenToday;
                 else if (typeof p.food_eaten_today === 'number') foodEaten = p.food_eaten_today;
                 else if (typeof p.foodUsed === 'number') foodEaten = p.foodUsed;
+            // Check if user has premium status
+            const isPrem = Boolean(data.isPremium || data.is_premium || data.premium || p?.isPremium || p?.is_premium || p?.premium);
+            if (isPrem) {
+                sendToExtension('PREMIUM_STATUS', { isPremium: true });
             }
 
             // Check if response message indicates daily food limit reached
@@ -142,7 +146,7 @@
                 sendToExtension('FOOD_STATUS', { foodEatenToday: foodEaten });
             }
 
-            const isFoodUrl = /eat|food|roti|bread|item\/use|inventory\/use|consume/i.test(url);
+            const isFoodUrl = /eat|food|roti|bread|item\/use|inventory\/use|consume|use-item|player\/eat|user\/eat|inventory\/consume/i.test(url);
             if (isFoodUrl && status >= 200 && status < 300) {
                 sendToExtension('FOOD_CONSUMED', { raw: data });
             }
@@ -163,12 +167,21 @@
                 }
             } catch { /* ignore */ }
 
+            let isFoodRequest = false;
+            try {
+                const bodyStr = typeof init?.body === 'string' ? init.body : '';
+                if (/bread|roti|makan|consume/i.test(bodyStr)) isFoodRequest = true;
+            } catch { /* ignore */ }
+
             const response = await originalFetch.apply(this, arguments);
 
             // Clone and inspect API responses safely
             try {
                 const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
                 if (url && (url.includes('/api/') || url.startsWith('/api/'))) {
+                    if (isFoodRequest && response.status >= 200 && response.status < 300) {
+                        sendToExtension('FOOD_CONSUMED', { url });
+                    }
                     const clone = response.clone();
                     const contentType = clone.headers.get('content-type') || '';
                     if (contentType.includes('application/json')) {
@@ -214,11 +227,15 @@
             return originalSetHeader.apply(this, arguments);
         };
 
-        XMLHttpRequest.prototype.send = function() {
+        XMLHttpRequest.prototype.send = function(body) {
+            const isFoodReq = typeof body === 'string' && /bread|roti|makan|consume/i.test(body);
             this.addEventListener('load', function() {
                 try {
                     const url = this._aw_url || this.responseURL || '';
                     if (url && (url.includes('/api/') || url.startsWith('/api/'))) {
+                        if (isFoodReq && this.status >= 200 && this.status < 300) {
+                            sendToExtension('FOOD_CONSUMED', { url });
+                        }
                         const ct = this.getResponseHeader('content-type') || '';
                         if (ct.includes('application/json') && this.responseText) {
                             try {

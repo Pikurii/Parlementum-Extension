@@ -243,14 +243,15 @@ function renderUI() {
     }
 
     // 3.5. Food Slots Tracker
-    const foodEaten = Math.max(0, Math.min(10, currentStatus.foodEatenToday || 0));
-    const foodLeft = 10 - foodEaten;
-    if (elFoodVal) elFoodVal.textContent = `${foodEaten}/10`;
+    const maxFood = currentStatus.maxFoodDaily || currentConfig.maxFoodDaily || 10;
+    const foodEaten = Math.max(0, Math.min(maxFood, currentStatus.foodEatenToday || 0));
+    const foodLeft = Math.max(0, maxFood - foodEaten);
+    if (elFoodVal) elFoodVal.textContent = `${foodEaten}/${maxFood}`;
     if (elFoodStatus) {
         if (foodLeft === 0) {
             elFoodStatus.textContent = 'Kuota habis';
             elFoodStatus.style.color = '#10b981';
-        } else if (minsToReset <= 240) {
+        } else if (minsToReset <= 240 && currentConfig.foodResetReminderEnabled !== false) {
             elFoodStatus.textContent = `Sisa ${foodLeft} slot!`;
             elFoodStatus.style.color = '#f59e0b';
         } else {
@@ -656,7 +657,8 @@ const btnFoodInc = document.getElementById('popup-food-inc');
 const btnFoodMax = document.getElementById('popup-food-max');
 
 function setPopupFood(val) {
-    const food = Math.max(0, Math.min(10, val));
+    const maxFood = currentStatus.maxFoodDaily || currentConfig.maxFoodDaily || 10;
+    const food = Math.max(0, Math.min(maxFood, val));
     currentStatus.foodEatenToday = food;
     renderUI();
     chrome.storage.local.set({ aw_foodEatenToday: food.toString() });
@@ -679,7 +681,8 @@ btnFoodInc?.addEventListener('click', e => {
 
 btnFoodMax?.addEventListener('click', e => {
     e.stopPropagation();
-    setPopupFood(10);
+    const maxFood = currentStatus.maxFoodDaily || currentConfig.maxFoodDaily || 10;
+    setPopupFood(maxFood);
 });
 
 // Initial load

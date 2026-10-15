@@ -392,6 +392,32 @@ export function createSettingsModal(CONFIG, ctx) {
                         </div>
                     </div>
 
+                    <div class="aw-card">
+                        <div class="aw-card-row">
+                            <div class="aw-card-info">
+                                <div class="aw-card-title">Batas Jatah Makanan Harian (Roti)</div>
+                                <div class="aw-card-desc">Batas konsumsi roti harian dari game (disetel ulang 00:00 UTC). Pemain standar memiliki kuota 10 slot, sedangkan akun Premium memiliki kuota 20 slot.</div>
+                            </div>
+                            <select id="setting-max-food-daily" class="aw-select-box">
+                                <option value="10" ${(CONFIG.maxFoodDaily ?? 10) === 10 ? 'selected' : ''}>10 Slot (Regular)</option>
+                                <option value="20" ${(CONFIG.maxFoodDaily ?? 10) === 20 ? 'selected' : ''}>20 Slot (Premium)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="aw-card">
+                        <div class="aw-card-row">
+                            <div class="aw-card-info">
+                                <div class="aw-card-title">Pengingat Kuota Roti Sebelum Reset UTC</div>
+                                <div class="aw-card-desc">Menampilkan penanda visual mencolok jika waktu server mendekati pergantian hari (&lt; 4 jam ke 00:00 UTC) dan kuota makanan masih belum habis digunakan.</div>
+                            </div>
+                            <label class="aw-switch">
+                                <input type="checkbox" id="setting-food-reset-reminder" ${CONFIG.foodResetReminderEnabled !== false ? 'checked' : ''}>
+                                <span class="aw-slider"></span>
+                            </label>
+                        </div>
+                    </div>
+
                     <!-- Formula Sleep Info Card -->
                     <div style="background: rgba(0, 255, 136, 0.04); border: 1px solid rgba(0, 255, 136, 0.15); border-radius: 10px; padding: 14px; margin-top: 14px;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -806,6 +832,12 @@ export function createSettingsModal(CONFIG, ctx) {
         const energyFlushEl = document.getElementById('setting-energy-flush');
         if (energyFlushEl) CONFIG.energyFlushEnabled = energyFlushEl.checked;
 
+        const maxFoodDailyEl = document.getElementById('setting-max-food-daily');
+        if (maxFoodDailyEl) CONFIG.maxFoodDaily = parseInt(maxFoodDailyEl.value, 10) || 10;
+
+        const foodReminderEl = document.getElementById('setting-food-reset-reminder');
+        if (foodReminderEl) CONFIG.foodResetReminderEnabled = foodReminderEl.checked;
+
         const autoReloadTabEl = document.getElementById('setting-auto-reload-tab');
         if (autoReloadTabEl) CONFIG.autoReloadTabEnabled = autoReloadTabEl.checked;
 
@@ -1209,6 +1241,12 @@ export function openSettings(CONFIG, ctx) {
 
     const energyFlushCb = document.getElementById('setting-energy-flush');
     if (energyFlushCb) energyFlushCb.checked = Boolean(CONFIG.energyFlushEnabled);
+
+    const maxFoodDailySel = document.getElementById('setting-max-food-daily');
+    if (maxFoodDailySel) maxFoodDailySel.value = String(CONFIG.maxFoodDaily ?? 10);
+
+    const foodReminderCb = document.getElementById('setting-food-reset-reminder');
+    if (foodReminderCb) foodReminderCb.checked = Boolean(CONFIG.foodResetReminderEnabled !== false);
 
     const autoReloadTabCb = document.getElementById('setting-auto-reload-tab');
     if (autoReloadTabCb) autoReloadTabCb.checked = Boolean(CONFIG.autoReloadTabEnabled);

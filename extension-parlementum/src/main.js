@@ -365,9 +365,26 @@ import { initInterceptorClient }                              from './intercepto
                     if (msg.totalWorkXP != null) state.totalWorkXP = msg.totalWorkXP;
                     if (msg.lastWorkTime) state.lastWorkTime = msg.lastWorkTime;
                     if (msg.nextWorkTimestamp != null) state.nextWorkTimestamp = msg.nextWorkTimestamp;
+                    if (msg.foodEatenToday != null && msg.foodEatenToday !== state.foodEatenToday) {
+                        state.foodEatenToday = msg.foodEatenToday;
+                        setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                    }
+                    if (msg.maxFoodDaily != null && msg.maxFoodDaily !== CONFIG.maxFoodDaily) {
+                        CONFIG.maxFoodDaily = msg.maxFoodDaily;
+                    }
 
                     updatePanel();
                     patchPageVisualEnergy(state.currentEnergy, state.maxEnergy);
+                }
+            }
+
+            // 1.5. Real-time instant food sync across all tabs
+            if (msg.type === 'FOOD_UPDATED' && typeof msg.foodEatenToday === 'number') {
+                if (state.foodEatenToday !== msg.foodEatenToday) {
+                    state.foodEatenToday = msg.foodEatenToday;
+                    setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                    saveLiveStatus(state, CONFIG, true);
+                    updatePanel();
                 }
             }
 
@@ -405,6 +422,8 @@ import { initInterceptorClient }                              from './intercepto
                         totalWorkXP: state.totalWorkXP,
                         lastWorkTime: state.lastWorkTime,
                         nextWorkTimestamp: state.nextWorkTimestamp,
+                        foodEatenToday: state.foodEatenToday,
+                        maxFoodDaily: CONFIG.maxFoodDaily || 10,
                         timestamp: Date.now()
                     });
                 }
@@ -478,10 +497,18 @@ import { initInterceptorClient }                              from './intercepto
                     return true;
                 }
                 if (msg.action === 'setFoodCount') {
-                    const newFood = Math.max(0, Math.min(10, Number(msg.value) || 0));
+                    const maxFood = CONFIG.maxFoodDaily || 10;
+                    const newFood = Math.max(0, Math.min(maxFood, Number(msg.value) || 0));
                     state.foodEatenToday = newFood;
                     setValue('aw_foodEatenToday', newFood.toString());
                     saveLiveStatus(state, CONFIG, true);
+                    try {
+                        tabChannel?.postMessage({
+                            type: 'FOOD_UPDATED',
+                            foodEatenToday: newFood,
+                            timestamp: Date.now()
+                        });
+                    } catch { /* ignore */ }
                     updatePanel();
                     sendResponse({ ok: true, foodEatenToday: newFood });
                     return true;
@@ -808,14 +835,22 @@ import { initInterceptorClient }                              from './intercepto
     }
 
     function scanDomForFoodToast() {
-        if (state.foodEatenToday >= 10) return;
+        const maxFood = CONFIG.maxFoodDaily || 10;
+        if (state.foodEatenToday >= maxFood) return;
         try {
             const bodyText = document.body ? document.body.innerText || '' : '';
             if (bodyText.includes('Batas roti harian tercapai') || bodyText.includes('batas roti harian tercapai')) {
-                state.foodEatenToday = 10;
-                setValue('aw_foodEatenToday', '10');
+                state.foodEatenToday = maxFood;
+                setValue('aw_foodEatenToday', maxFood.toString());
                 saveLiveStatus(state, CONFIG, true);
-                log('Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel 10/10.', 'info');
+                try {
+                    tabChannel?.postMessage({
+                        type: 'FOOD_UPDATED',
+                        foodEatenToday: maxFood,
+                        timestamp: Date.now()
+                    });
+                } catch { /* ignore */ }
+                log(`Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel ${maxFood}/${maxFood}.`, 'info');
                 updatePanel();
             }
         } catch { /* ignore */ }
@@ -826,16 +861,24 @@ import { initInterceptorClient }                              from './intercepto
 
         if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
             const observer = new MutationObserver((mutations) => {
-                if (state.foodEatenToday >= 10) return;
+                const maxFood = CONFIG.maxFoodDaily || 10;
+                if (state.foodEatenToday >= maxFood) return;
                 for (const m of mutations) {
                     for (const node of m.addedNodes) {
                         if (node.nodeType === 1) {
                             const txt = node.textContent || '';
                             if (txt.includes('Batas roti harian tercapai') || txt.includes('batas roti harian tercapai')) {
-                                state.foodEatenToday = 10;
-                                setValue('aw_foodEatenToday', '10');
+                                state.foodEatenToday = maxFood;
+                                setValue('aw_foodEatenToday', maxFood.toString());
                                 saveLiveStatus(state, CONFIG, true);
-                                log('Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel 10/10.', 'info');
+                                try {
+                                    tabChannel?.postMessage({
+                                        type: 'FOOD_UPDATED',
+                                        foodEatenToday: maxFood,
+                                        timestamp: Date.now()
+                                    });
+                                } catch { /* ignore */ }
+                                log(`Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel ${maxFood}/${maxFood}.`, 'info');
                                 updatePanel();
                                 return;
                             }
