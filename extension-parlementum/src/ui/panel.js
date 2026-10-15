@@ -373,10 +373,10 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
             el.textContent = 'Kuota habis';
             el.style.color = '#10b981';
         } else if (minsToReset <= 240 && CONFIG.foodResetReminderEnabled !== false) { // < 4 jam ke reset UTC
-            el.textContent = `Sisa ${foodLeft} slot!`;
+            el.textContent = `Sisa ${foodLeft}!`;
             el.style.color = '#f59e0b';
         } else {
-            el.textContent = `${foodLeft} slot tersisa`;
+            el.textContent = `${foodLeft} sisa`;
             el.style.color = '#94a3b8';
         }
     });
@@ -683,18 +683,17 @@ function _buildPanelHTML(state, CONFIG) {
                     white-space: nowrap;
                     box-sizing: border-box;
                 ">
-                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
+                    <div style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
                         <span style="color:#f59e0b;display:flex;align-items:center;flex-shrink:0;">${ICONS.utensils}</span>
                         <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Slot Makanan:</span>
                         <span id="aw-food-slot-text" style="color:#f59e0b;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">${state.foodEatenToday || 0}/${CONFIG.maxFoodDaily || 10}</span>
+                        <span style="color:#475569;font-size:9px;margin:0 1px;">•</span>
+                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;white-space:nowrap;flex-shrink:0;">${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? 'Kuota habis' : `${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0)} sisa`}</span>
                     </div>
-                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;margin-left:auto;">
-                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;white-space:nowrap;flex-shrink:0;">${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0)} slot tersisa</span>
-                        <div style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;">
-                            <button id="aw-food-dec" type="button" title="Kurangi 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">-</button>
-                            <button id="aw-food-inc" type="button" title="Tambah 1 jatah makanan" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">+</button>
-                            <button id="aw-food-max" type="button" title="Set langsung kuota penuh" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Penuh</button>
-                        </div>
+                    <div style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-left:auto;" title="Koreksi manual jika diperlukan (deteksi otomatis tetap aktif)">
+                        <button id="aw-food-dec" type="button" title="Kurangi 1 kuota makanan (koreksi manual)" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">-</button>
+                        <button id="aw-food-inc" type="button" title="Tambah 1 kuota makanan (koreksi manual)" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">+</button>
+                        <button id="aw-food-max" type="button" title="Set kuota penuh (koreksi manual)" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Max</button>
                     </div>
                 </div>
 

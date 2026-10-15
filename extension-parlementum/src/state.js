@@ -75,7 +75,19 @@ export function createInitialState(CONFIG, savedStartTime, hasUncertainWorkResul
         totalActualEnergySpent:    getStoredInteger('totalActualEnergySpent', 0),
         totalEstimatedEnergySpent: getStoredInteger('totalEstimatedEnergySpent', 0),
 
-        foodEatenToday:            getStoredInteger('aw_foodEatenToday', 0, 0, 20),
+        foodEatenToday:            (() => {
+            const currentUtcDay = new Date().toISOString().slice(0, 10);
+            const savedUtcDay = getValue('aw_foodUtcDate', '');
+            if (savedUtcDay && savedUtcDay !== currentUtcDay) {
+                setValue('aw_foodUtcDate', currentUtcDay);
+                setValue('aw_foodEatenToday', '0');
+                return 0;
+            }
+            if (!savedUtcDay) {
+                setValue('aw_foodUtcDate', currentUtcDay);
+            }
+            return getStoredInteger('aw_foodEatenToday', 0, 0, 20);
+        })(),
         maxFoodDaily:              getStoredInteger('aw_maxFoodDaily', 10, 10, 20),
         circuitBreakerActive:      false,
         circuitBreakerReason:      '',
@@ -209,7 +221,15 @@ export function reloadStateFromStorage(state, loadWorkHistory) {
     state.totalEnergySpent =          getStoredInteger('totalEnergySpent', 0);
     state.totalActualEnergySpent =    getStoredInteger('totalActualEnergySpent', 0);
     state.totalEstimatedEnergySpent = getStoredInteger('totalEstimatedEnergySpent', 0);
-    state.foodEatenToday = getStoredInteger('aw_foodEatenToday', 0, 0, 20);
+    const currentUtcDay = new Date().toISOString().slice(0, 10);
+    const savedUtcDay = getValue('aw_foodUtcDate', '');
+    if (savedUtcDay && savedUtcDay !== currentUtcDay) {
+        state.foodEatenToday = 0;
+        setValue('aw_foodUtcDate', currentUtcDay);
+        setValue('aw_foodEatenToday', '0');
+    } else {
+        state.foodEatenToday = getStoredInteger('aw_foodEatenToday', 0, 0, 20);
+    }
     state.maxFoodDaily = getStoredInteger('aw_maxFoodDaily', 10, 10, 20);
     state.lastWorkDate = getValue('lastWorkDate', new Date().toDateString());
     state.lastWorkTime = getValue('lastWorkTime', 'Belum pernah');

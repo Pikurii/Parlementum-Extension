@@ -115,22 +115,43 @@ import { initInterceptorClient }                              from './intercepto
 
     function checkDailyReset() {
         if (!chrome.runtime?.id) return;
+        const currentUtcDay = new Date().toISOString().slice(0, 10);
         const today = new Date().toDateString();
-        if (state.lastWorkDate === today) return;
-        state.workToday  = 0;
-        state.xpToday    = 0;
-        state.foodEatenToday = 0;
-        setValue('aw_foodEatenToday', '0');
-        state.lastWorkDate = today;
-        state.sessionStartTime = Date.now();
-        setValue('sessionStartTime', state.sessionStartTime.toString());
-        setValue('sessionStartDay', today);
-        if (!workHistory[today]) workHistory[today] = { shifts: 0, xp: 0 };
-        setValue('workToday', '0');
-        setValue('xpToday', '0');
-        setValue('lastWorkDate', today);
-        saveWorkHistory(workHistory);
-        log('Hari berganti (00:00 UTC). Kuota makanan (10 slot), counter shift & sesi di-reset.', 'info');
+
+        // 1. Food quota strictly follows 00:00 UTC game server reset
+        const lastFoodUtc = getValue('aw_foodUtcDate', '');
+        if (lastFoodUtc && lastFoodUtc !== currentUtcDay) {
+            state.foodEatenToday = 0;
+            setValue('aw_foodEatenToday', '0');
+            setValue('aw_foodUtcDate', currentUtcDay);
+            try {
+                tabChannel?.postMessage({
+                    type: 'FOOD_UPDATED',
+                    foodEatenToday: 0,
+                    timestamp: Date.now()
+                });
+            } catch { /* ignore */ }
+            log('Reset server 00:00 UTC tercapai. Kuota makanan harian di-reset ke 0.', 'info');
+        } else if (!lastFoodUtc) {
+            setValue('aw_foodUtcDate', currentUtcDay);
+        }
+
+        // 2. Work shifts and XP daily counters
+        if (state.lastWorkDate === today && lastFoodUtc === currentUtcDay) return;
+        if (state.lastWorkDate !== today) {
+            state.workToday  = 0;
+            state.xpToday    = 0;
+            state.lastWorkDate = today;
+            state.sessionStartTime = Date.now();
+            setValue('sessionStartTime', state.sessionStartTime.toString());
+            setValue('sessionStartDay', today);
+            if (!workHistory[today]) workHistory[today] = { shifts: 0, xp: 0 };
+            setValue('workToday', '0');
+            setValue('xpToday', '0');
+            setValue('lastWorkDate', today);
+            saveWorkHistory(workHistory);
+            log('Hari berganti. Counter shift harian & sesi di-reset.', 'info');
+        }
         updatePanel();
     }
 
@@ -838,20 +859,25 @@ import { initInterceptorClient }                              from './intercepto
         const maxFood = CONFIG.maxFoodDaily || 10;
         if (state.foodEatenToday >= maxFood) return;
         try {
-            const bodyText = document.body ? document.body.innerText || '' : '';
-            if (bodyText.includes('Batas roti harian tercapai') || bodyText.includes('batas roti harian tercapai')) {
-                state.foodEatenToday = maxFood;
-                setValue('aw_foodEatenToday', maxFood.toString());
-                saveLiveStatus(state, CONFIG, true);
-                try {
-                    tabChannel?.postMessage({
-                        type: 'FOOD_UPDATED',
-                        foodEatenToday: maxFood,
-                        timestamp: Date.now()
-                    });
-                } catch { /* ignore */ }
-                log(`Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel ${maxFood}/${maxFood}.`, 'info');
-                updatePanel();
+            const candidates = document.querySelectorAll('[role="alert"], [role="status"], .toast, [class*="toast" i], [class*="alert" i], [data-radix-popper-content-wrapper], [data-sonner-toast]');
+            for (const el of candidates) {
+                if (el.closest('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')) continue;
+                const txt = el.textContent || '';
+                if (/batas roti harian tercapai|daily bread limit/i.test(txt)) {
+                    state.foodEatenToday = maxFood;
+                    setValue('aw_foodEatenToday', maxFood.toString());
+                    saveLiveStatus(state, CONFIG, true);
+                    try {
+                        tabChannel?.postMessage({
+                            type: 'FOOD_UPDATED',
+                            foodEatenToday: maxFood,
+                            timestamp: Date.now()
+                        });
+                    } catch { /* ignore */ }
+                    log(`Notifikasi game: Batas konsumsi roti harian tercapai (${maxFood}/${maxFood}).`, 'info');
+                    updatePanel();
+                    return;
+                }
             }
         } catch { /* ignore */ }
     }
@@ -866,8 +892,9 @@ import { initInterceptorClient }                              from './intercepto
                 for (const m of mutations) {
                     for (const node of m.addedNodes) {
                         if (node.nodeType === 1) {
+                            if (node.closest?.('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')) continue;
                             const txt = node.textContent || '';
-                            if (txt.includes('Batas roti harian tercapai') || txt.includes('batas roti harian tercapai')) {
+                            if (/batas roti harian tercapai|daily bread limit/i.test(txt)) {
                                 state.foodEatenToday = maxFood;
                                 setValue('aw_foodEatenToday', maxFood.toString());
                                 saveLiveStatus(state, CONFIG, true);
@@ -878,7 +905,7 @@ import { initInterceptorClient }                              from './intercepto
                                         timestamp: Date.now()
                                     });
                                 } catch { /* ignore */ }
-                                log(`Notifikasi game terdeteksi: Batas roti harian tercapai. Slot makanan disetel ${maxFood}/${maxFood}.`, 'info');
+                                log(`Notifikasi game: Batas konsumsi roti harian tercapai (${maxFood}/${maxFood}).`, 'info');
                                 updatePanel();
                                 return;
                             }
@@ -895,8 +922,9 @@ import { initInterceptorClient }                              from './intercepto
             } catch { /* ignore */ }
         }
 
-        // Also scan after any click in the document (user clicking eat in UI)
-        document.addEventListener('click', () => {
+        // Also scan after user clicks in the document (e.g. eating bread in inventory)
+        document.addEventListener('click', (e) => {
+            if (e.target?.closest?.('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal')) return;
             setTimeout(scanDomForFoodToast, 400);
         }, { passive: true });
     }

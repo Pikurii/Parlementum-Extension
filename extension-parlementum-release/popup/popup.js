@@ -255,7 +255,7 @@ function renderUI() {
             elFoodStatus.textContent = `Sisa ${foodLeft} slot!`;
             elFoodStatus.style.color = '#f59e0b';
         } else {
-            elFoodStatus.textContent = `${foodLeft} slot tersisa`;
+            elFoodStatus.textContent = `${foodLeft} sisa`;
             elFoodStatus.style.color = '#94a3b8';
         }
     }
