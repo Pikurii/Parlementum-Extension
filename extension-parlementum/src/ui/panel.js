@@ -181,7 +181,18 @@ export function createPanel(state, CONFIG, ctx) {
 
 /** @param {object} state @param {object} CONFIG @param {object} workHistory @param {object} ctx */
 export function updatePanel(state, CONFIG, workHistory, ctx) {
-    if (!chrome.runtime?.id) return;
+    if (!chrome.runtime?.id) {
+        _patchEl('aw-circuit-breaker-banner', el => {
+            el.style.display = 'block';
+            el.style.background = 'rgba(239, 68, 68, 0.25)';
+            el.style.borderColor = 'rgba(239, 68, 68, 0.5)';
+            el.style.color = '#fca5a5';
+            el.style.cursor = 'pointer';
+            el.textContent = 'Ekstensi telah di-reload. Klik di sini atau tekan F5 untuk menyambungkan kembali.';
+            el.onclick = () => window.location.reload();
+        });
+        return;
+    }
     const { getSyncedEnergy, getPlayerLevel, getMaxEnergyForLevel } = ctx;
 
     if (!state.userManuallyToggledPanel) {
@@ -481,6 +492,14 @@ export function setRunningUI(running) {
     _patchEl('aw-status-dot', el => {
         el.style.background = running ? '#00ff88' : '#ff4757';
         el.style.boxShadow  = `0 0 8px ${running ? '#00ff88' : '#ff4757'}`;
+    });
+    _patchEl('aw-mode-title', el => {
+        el.textContent = running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA';
+        el.style.color = running ? '#00ff88' : '#ff7777';
+    });
+    _patchEl('aw-mode-icon', el => {
+        el.innerHTML = running ? ICONS.zap : ICONS.pause;
+        el.style.color = running ? '#00ff88' : '#ff7777';
     });
     _patchEl('aw-pill-toggle', el => {
         el.innerHTML = running ? ICONS.pause : ICONS.play;
@@ -959,6 +978,10 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
     });
 
     function toggleRunningState() {
+        if (!chrome?.runtime?.id) {
+            window.location.reload();
+            return;
+        }
         state.running = !state.running;
         setRunningUI(state.running);
         ctx.log(state.running ? 'Script dilanjutkan' : 'Script di-pause', 'info');
@@ -968,14 +991,12 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
         ctx.updatePanel?.();
 
         try {
-            if (chrome?.runtime?.id) {
-                chrome.storage.local.set({ aw_live_status: summary });
-                chrome.runtime.sendMessage({
-                    type: 'POPUP_TO_TAB',
-                    action: 'toggleRunning',
-                    value: state.running
-                }).catch(() => {});
-            }
+            chrome.storage.local.set({ aw_live_status: summary });
+            chrome.runtime.sendMessage({
+                type: 'POPUP_TO_TAB',
+                action: 'toggleRunning',
+                value: state.running
+            }).catch(() => {});
         } catch { /* context invalidated */ }
     }
 
@@ -987,7 +1008,14 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
 
     toggleBtn?.addEventListener('click', toggleRunningState);
 
-    workNowBtn?.addEventListener('click', () => { ctx.log('Manual work triggered!', 'info'); ctx.doWork?.(true); });
+    workNowBtn?.addEventListener('click', () => {
+        if (!chrome?.runtime?.id) {
+            window.location.reload();
+            return;
+        }
+        ctx.log('Manual work triggered!', 'info');
+        ctx.doWork?.(true);
+    });
     logsBtn?.addEventListener('click', () => ctx.openLogViewer?.());
 
     // Food quota quick adjustment handlers

@@ -127,6 +127,8 @@
                 if (typeof p.foodEatenToday === 'number') foodEaten = p.foodEatenToday;
                 else if (typeof p.food_eaten_today === 'number') foodEaten = p.food_eaten_today;
                 else if (typeof p.foodUsed === 'number') foodEaten = p.foodUsed;
+            }
+
             // Check if user has premium status
             const isPrem = Boolean(data.isPremium || data.is_premium || data.premium || p?.isPremium || p?.is_premium || p?.premium);
             if (isPrem) {

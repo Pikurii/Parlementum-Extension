@@ -64,10 +64,6 @@ export async function doWork(ctx, manual = false) {
             log(`Energi saat ini (${state.currentEnergy}/${state.maxEnergy} EN) belum cukup! Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
             return 'waiting';
         }
-        if (state.currentEnergy < effectiveThreshold) {
-            log(`Energi belum mencapai target (${state.currentEnergy}/${state.maxEnergy} EN • Target: ${effectiveThreshold} EN).`, 'warn');
-            return 'waiting';
-        }
     } else {
         if (state.currentEnergy < effectiveThreshold) {
             // Passive waiting in automated mode: do not pollute activity log with repeated warnings

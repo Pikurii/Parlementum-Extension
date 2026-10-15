@@ -933,7 +933,7 @@ import { initInterceptorClient }                              from './intercepto
         while (true) {
             try {
                 if (!chrome.runtime?.id) {
-                    console.warn('[Auto Worker] Ekstensi telah di-reload. Loop dihentikan bersih. Silakan refresh tab game (F5).');
+                    console.log('[Auto Worker] Ekstensi telah di-reload. Loop dihentikan bersih. Silakan refresh tab game (F5).');
                     return;
                 }
 
@@ -1004,7 +1004,7 @@ import { initInterceptorClient }                              from './intercepto
                 }
             } catch (error) {
                 if (error?.message?.includes('Extension context invalidated') || !chrome.runtime?.id) {
-                    console.warn('[Auto Worker] Ekstensi telah di-reload. Loop dihentikan bersih.');
+                    console.log('[Auto Worker] Ekstensi telah di-reload. Loop dihentikan bersih.');
                     return;
                 }
                 console.error('[MainLoop]', error);
