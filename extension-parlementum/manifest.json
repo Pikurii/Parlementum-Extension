@@ -46,6 +46,7 @@
     }
   ],
   "background": {
+    "scripts": ["background.js"],
     "service_worker": "background.js"
   },
   "web_accessible_resources": [
