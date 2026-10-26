@@ -8,60 +8,60 @@
 [![Browsers](https://img.shields.io/badge/browsers-Chrome%20%7C%20Opera%20GX%20%7C%20Brave%20%7C%20Edge-orange.svg?style=for-the-badge)](https://github.com/Pikurii/Parlementum-Extension)
 [![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
 
-**Next-Gen Autonomous Worker, Multi-Stat Trainer & Energy Automation Suite for [Parlementum.org](https://parlamentum.org).**
+**Autonomous Worker, Multi-Stat Trainer & Energy Automation Suite for [Parlementum.org](https://parlamentum.org).**
 
-*Designed for high efficiency, seamless background execution, zero-cost tab idling, and natural human-like behavioral stealth.*
+*Designed for high efficiency, background execution, zero-cost tab idling, and natural human-like behavioral stealth.*
 
 </div>
 
 ---
 
-## 📖 Overview
+## Overview
 
-**Parlamentum Auto Worker** is an ultra-lightweight, high-performance browser extension (Manifest V3) engineered specifically for the geopolitical strategy game [Parlementum.org](https://parlamentum.org).
+**Parlamentum Auto Worker** is a lightweight, high-performance browser extension (Manifest V3) built for the geopolitical strategy game [Parlementum.org](https://parlamentum.org).
 
-It eliminates repetitive dashboard babysitting by tracking ground-truth energy recovery, computing complex regional infrastructure buffs, autonomously performing production shifts, training your character stats (Strength, Education, Economy), and maintaining daily bread quotas—all while operating in the background with near-zero CPU and memory overhead.
+It eliminates repetitive dashboard babysitting by tracking ground-truth energy recovery, computing regional infrastructure buffs, autonomously performing production shifts, training character stats (Strength, Education, Economy), and maintaining daily bread quotas—all while operating in the background with minimal CPU and memory overhead.
 
 ---
 
-## ⚡ Key Features
+## Key Features
 
-### 1. ⚙️ Intelligent Energy & Work Automation
+### 1. Intelligent Energy & Work Automation
 - **Ground-Truth Network Interception**: Hooks into `/api/player/work` responses within the main-world context to capture authoritative server numbers for energy, XP, and production outputs.
 - **Fail-Safe DOM Execution**: When direct API calls cannot be dispatched, falls back gracefully to synthetic human clicks on the verified `data-testid="work"` button.
 - **Dynamic Energy Threshold Jitter**: Applies subtle Gaussian random variations ($\pm 3$ EN) to work execution thresholds to avoid rigid, detectable patterns.
 - **Daily Golden Hour Flush (Jam Emas 00:00 UTC)**: Dynamically lowers energy thresholds in the 45 minutes preceding daily server rollover to ensure every bit of energy is converted into XP and production before reset.
 - **Accurate Region Regen Modeling**: Reads real-time regional infrastructure, Crown Index health bonuses (e.g. West Java $+50\%$ regen), and displays exact countdowns to target shifts and full capacity.
 
-### 2. 🏋️ Autonomous 3-Stat Training Suite
+### 2. Autonomous 3-Stat Training Suite
 - **100% In-Game Progress Synchronization**: Directly reads the rendered progress bar percentage (`style="width: X%"`) from the game's active training card (`dash-training`), ensuring an exact 1:1 match between the extension and the game dashboard.
 - **Configurable Stat Targets**: Independently set level caps for **Strength (STR)**, **Education (EDU)**, and **Economy (EKO)**.
 - **Smart Rotation & Priorities**: Choose between focused progression (`Pendidikan`, `Ekonomi`, `Kekuatan`) or `Seimbang` (trains the lowest stat first).
 - **Gold Safety Guard**: Built-in arithmetic progression calculator computes total gold costs for multi-level training runs and protects your reserve (`Min Gold Reserve`).
 
-### 3. 🥖 Auto-Synced Food & Bread Quota
+### 3. Auto-Synced Food & Bread Quota
 - **100% Automatic Synchronization**: Automatically detects standard ($10$ slots) or premium ($20$ slots) daily quota directly from server responses and DOM state.
 - **Clean & Spacious Design**: Eliminates cluttered manual `[-]`, `[+]`, and `[Max]` buttons in favor of an elegant, real-time status badge (`17/20 Slot • 3 sisa`).
 - **Reset Reminders**: Emits visual alerts when unconsumed food slots remain close to the 00:00 UTC daily reset.
 
-### 4. 🛡️ Advanced Stealth & Humanized Behavior
+### 4. Advanced Stealth & Humanized Behavior
 - **Organic Micro-Breaks**: Periodically triggers randomized rest intervals (default every 4 hours for 8–15 minutes) mimicking realistic human pauses away from the keyboard.
 - **Human Click Physics**: Simulates organic cursor placement within button bounds using bounded Gaussian jitter rather than robotic, dead-center clicks.
 - **Adaptive Exponential Backoff**: Automatically handles server maintenance, Cloudflare challenges, and HTTP 502/503/504 errors by scaling retry intervals progressively (from 45s up to 8 minutes) with human-like jitter.
 - **Circuit Breaker Protection**: Detects verification prompts, captchas, and authentication expiration, halting operations safely to protect your account.
 
-### 5. 🍃 Eco-Mode & Zero-Cost Background Tabs
+### 5. Eco-Mode & Zero-Cost Background Tabs
 - **GPU & Animation Suspension (`.aw-tab-hidden`)**: Listens to tab visibility events (`visibilitychange`). When the tab is in the background or minimized, CSS gradient shimmers and pulse animations are frozen, reducing compositor GPU/CPU load to near-zero.
 - **Passive Math Projection**: Energy recovery during background execution relies on timestamp delta mathematics rather than expensive continuous DOM polling.
 - **Multi-Tab Mutex Coordination**: Employs `BroadcastChannel` with atomic leader locks so that opening multiple Parlamentum tabs will never trigger double work shifts or race conditions.
 
-### 6. 🧪 Automated Unit Test Suite
+### 6. Automated Unit Test Suite
 - **17 Native Unit Tests**: Powered by Node.js native test runner (`node --test tests/**/*.test.js`) with zero external runtime dependencies.
 - **Validated Formulas**: Verifies arithmetic gold progression, official exponential training durations, bounded Gaussian distributions, exponential backoff scales, and DOM progress priority.
 
 ---
 
-## 🖥️ User Interface Surfaces
+## User Interface Surfaces
 
 | Surface | Description |
 | :--- | :--- |
@@ -72,7 +72,7 @@ It eliminates repetitive dashboard babysitting by tracking ground-truth energy r
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## Keyboard Shortcuts
 
 When on the Parlamentum dashboard, the following default shortcuts are available (customizable in Settings):
 
@@ -86,7 +86,7 @@ When on the Parlamentum dashboard, the following default shortcuts are available
 
 ---
 
-## 📦 Installation Guide
+## Installation Guide
 
 ### Option A: Using the Pre-Built ZIP (Recommended)
 
@@ -107,7 +107,7 @@ If you clone this repository directly, load the pre-built `extension-parlementum
 
 ---
 
-## 🛠️ Local Development & Testing
+## Local Development & Testing
 
 ### Prerequisites
 - [Node.js](https://nodejs.org) (v18 or higher recommended)
@@ -137,7 +137,7 @@ npm run zip
 
 ---
 
-## 📁 Repository Structure
+## Repository Structure
 
 ```text
 Parlementum-Extension/
@@ -183,7 +183,7 @@ Parlementum-Extension/
 
 ---
 
-## 💬 Frequently Asked Questions (FAQ)
+## Frequently Asked Questions (FAQ)
 
 **Q: Does the browser tab need to stay active in the foreground?**  
 **A:** No. You can minimize the window or keep the tab in the background. The extension's Eco Mode suspends expensive CSS animations, relying on timestamp delta calculations to track energy passively while consuming virtually zero resources.
@@ -196,12 +196,12 @@ Parlementum-Extension/
 
 ---
 
-## ⚖️ Disclaimer
+## Disclaimer
 
 This project is developed for personal automation, quality-of-life convenience, and educational purposes. Please use it responsibly and in accordance with the game's community guidelines. The developers assume no responsibility for any unintended consequences or account actions resulting from third-party automation tools.
 
 ---
 
-## 📜 License
+## License
 
 Distributed under the [MIT License](LICENSE). Free for personal use, modification, and contribution.
