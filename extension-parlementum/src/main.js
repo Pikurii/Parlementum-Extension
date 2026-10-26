@@ -52,6 +52,29 @@ function safeSetInterval(fn, delay) {
 (async function bootstrap() {
     'use strict';
 
+    // ─── Route Guard: Isolated Mode on Auth & Registration Pages ──────────────
+    const isAuthRoute = (path = window.location.pathname) =>
+        /^\/(login|register|signup|forgot-password|reset-password)/i.test(path);
+
+    if (isAuthRoute()) {
+        console.log(`[Auto Worker] Halaman autentikasi terdeteksi (${window.location.pathname}). Mode passthrough aktif.`);
+
+        // Non-invasive SPA navigation observer without touching DOM or form elements
+        let lastPath = window.location.pathname;
+        const check = () => {
+            if (window.location.pathname !== lastPath) {
+                lastPath = window.location.pathname;
+                if (!isAuthRoute(lastPath)) {
+                    console.log(`[Auto Worker] Navigasi ke halaman game terdeteksi (${lastPath}). Memuat lingkungan game...`);
+                    window.location.reload();
+                }
+            }
+        };
+        window.addEventListener('popstate', check);
+        setInterval(check, 500);
+        return; // SELESAI! Jangan sentuh DOM, jangan jalankan worker, form registrasi/login tetap 100% utuh!
+    }
+
     // 1. Load all persistent data synchronously into cache
     await initStorage();
 
@@ -250,24 +273,6 @@ function safeSetInterval(fn, delay) {
     }
 
     ctx.wakePendingWork = () => wakePendingWork?.();
-
-    // ─── Route Guard: Isolated Mode on Auth Pages ──────────────────────────────
-    const isAuthRoute = (path = window.location.pathname) =>
-        /^\/(login|register|signup|forgot-password|reset-password)/i.test(path);
-
-    if (isAuthRoute()) {
-        console.log(`[Auto Worker] Halaman autentikasi terdeteksi (${window.location.pathname}). Isolasi aktif: DOM tidak dimodifikasi agar form login tetap utuh.`);
-        setupLoginCapture(log);
-        tryAutoLogin(CONFIG, log, sendNotification);
-
-        _watchSpaNavigation(() => {
-            if (!isAuthRoute()) {
-                console.log(`[Auto Worker] Navigasi ke halaman game terdeteksi (${window.location.pathname}). Memuat lingkungan game...`);
-                window.location.reload();
-            }
-        });
-        return; // SELESAI UNTUK HALAMAN LOGIN! Tidak ada panel, modal, atau worker loop yang mengganggu login!
-    }
 
     // ─── Main loop (Hanya berjalan di lingkungan game) ─────────────────────────
 
@@ -1489,12 +1494,12 @@ function _watchSpaNavigation(onRouteChanged) {
     try {
         const origPushState = history.pushState;
         history.pushState = function(...args) {
-            origPushState.apply(this, args);
+            origPushState.apply(history, args);
             check();
         };
         const origReplaceState = history.replaceState;
         history.replaceState = function(...args) {
-            origReplaceState.apply(this, args);
+            origReplaceState.apply(history, args);
             check();
         };
     } catch { /* ignore */ }

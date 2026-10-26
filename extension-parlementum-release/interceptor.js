@@ -12,6 +12,11 @@
 (function() {
     'use strict';
 
+    // ── Guard: NEVER touch authentication, registration, or public onboarding routes ───
+    if (/^\/(login|register|signup|forgot-password|reset-password)/i.test(window.location.pathname)) {
+        return; // Complete passthrough: do not hook window.fetch, XMLHttpRequest, or dispatch messages
+    }
+
     if (window.__PARLAMENTUM_INTERCEPTOR_ACTIVE__) return;
     window.__PARLAMENTUM_INTERCEPTOR_ACTIVE__ = true;
 
@@ -262,7 +267,9 @@
 
             const method = (init?.method || (input && typeof input === 'object' && input.method) || 'GET').toUpperCase();
 
-            const response = await originalFetch.apply(this, arguments);
+            // Crucial: ALWAYS call originalFetch with `window` as this context
+            // to prevent "TypeError: 'fetch' called on an object that does not implement interface Window" in Firefox!
+            const response = await Reflect.apply(originalFetch, window, arguments);
 
             // Clone and inspect API responses safely
             try {
@@ -279,15 +286,16 @@
                     }
                     const clone = response.clone();
                     const reqBody = init?.body || (input && typeof input === 'object' && input.body) || null;
-                    clone.json().then(data => {
-                        scanAndDispatchApiData(url, response.status, data, method, reqBody);
-                    }).catch(() => {
-                        clone.text().then(text => {
+                    clone.text().then(text => {
+                        try {
+                            const data = JSON.parse(text);
+                            scanAndDispatchApiData(url, response.status, data, method, reqBody);
+                        } catch {
                             if (/batas roti harian tercapai/i.test(text)) {
                                 sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
                             }
-                        }).catch(() => {});
-                    });
+                        }
+                    }).catch(() => {});
                 }
             } catch { /* ignore */ }
 
