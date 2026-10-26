@@ -68,6 +68,26 @@ async function appendBackgroundLog(message, type = 'info') {
     } catch { /* ignore */ }
 }
 
+/**
+ * Pure mathematical projection of energy from a fixed anchor point.
+ * Preserves fractional elapsed milliseconds so that zero seconds are lost across ticks.
+ *
+ * @param {object} syncBase { current, max, updatedAt, regenRate }
+ * @param {number} [now=Date.now()]
+ * @returns {number} Integer energy clamped between 0 and max
+ */
+function calculateProjectedEnergy(syncBase, now = Date.now()) {
+    if (!syncBase || typeof syncBase.current !== 'number') return 0;
+    const max = syncBase.max || 115;
+    if (syncBase.current >= max) return max;
+    const updatedAt = syncBase.updatedAt || now;
+    const elapsedMs = Math.max(0, now - updatedAt);
+    const rate = Math.max(0.5, syncBase.regenRate || 1.0);
+    // Parlamentum formula: `rate` energy per minute (60,000 ms)
+    const gained = Math.floor((elapsedMs * rate) / 60000);
+    return Math.min(max, syncBase.current + gained);
+}
+
 function updateBadge(status, rawConfig) {
     if (!chrome.action) return;
     if (!status) {
@@ -77,11 +97,10 @@ function updateBadge(status, rawConfig) {
 
     const config = parseConfig(rawConfig);
 
-    // 1. Check if token is expired, missing, or paused for token
+    // 1. Check if token is expired or paused for token
     const isExpired = Boolean(
         status.tokenExpired ||
         status.pausedForToken ||
-        !status.hasToken ||
         (status.tokenExpiry && Number(status.tokenExpiry) <= Date.now())
     );
 
@@ -111,16 +130,19 @@ function updateBadge(status, rawConfig) {
         }
     }
 
-    // 4. Energy display: includes natural passive regen with city health buff
+    // 4. Energy display: includes natural passive regen with city health buff via fixed anchor
+    const now = Date.now();
     let curE = status.currentEnergy;
-    const maxE = status.maxEnergy || 115;
-    if (curE != null && status.updatedAt && curE < maxE) {
-        const elapsedMins = (Date.now() - status.updatedAt) / 60000;
-        const regenRate = status.regenRate || 1.0;
-        const gained = Math.floor(elapsedMins * regenRate);
-        if (gained > 0) {
-            curE = Math.min(maxE, curE + gained);
-        }
+    if (status.energySyncBase) {
+        curE = calculateProjectedEnergy(status.energySyncBase, now);
+    } else if (curE == null || typeof curE !== 'number') {
+        const syncBase = {
+            current: 0,
+            max: status.maxEnergy || 115,
+            updatedAt: status.updatedAt || now,
+            regenRate: status.regenRate || 1.0
+        };
+        curE = calculateProjectedEnergy(syncBase, now);
     }
     const text = curE != null ? String(curE) : '';
     chrome.action.setBadgeText({ text });
@@ -133,16 +155,30 @@ function updateBadge(status, rawConfig) {
 }
 
 // ── Refresh badge on service worker wake-up ──────────────────────────────────
-chrome.storage.local.get(['aw_live_status', 'aw_config']).then(data => {
-    updateBadge(data.aw_live_status, data.aw_config);
+chrome.storage.local.get(['aw_live_status', 'aw_config', 'aw_worker_running', 'aw_auth_token', 'aw_auth_token_expiry']).then(data => {
+    const status = data.aw_live_status || {};
+    if (data.aw_worker_running !== undefined) {
+        status.running = data.aw_worker_running !== 'false';
+    }
+    if (data.aw_auth_token_expiry && Number(data.aw_auth_token_expiry) <= Date.now()) {
+        status.tokenExpired = true;
+    }
+    updateBadge(status, data.aw_config);
 }).catch(() => {});
 
 // ── Listen for storage changes to update badge immediately ───────────────────
 chrome.storage.onChanged.addListener((changes, area) => {
     if (area !== 'local') return;
-    if (changes.aw_live_status || changes.aw_config) {
-        chrome.storage.local.get(['aw_live_status', 'aw_config']).then(data => {
-            updateBadge(data.aw_live_status, data.aw_config);
+    if (changes.aw_live_status || changes.aw_config || changes.aw_worker_running || changes.aw_auth_token_expiry) {
+        chrome.storage.local.get(['aw_live_status', 'aw_config', 'aw_worker_running', 'aw_auth_token', 'aw_auth_token_expiry']).then(data => {
+            const status = data.aw_live_status || {};
+            if (data.aw_worker_running !== undefined) {
+                status.running = data.aw_worker_running !== 'false';
+            }
+            if (data.aw_auth_token_expiry && Number(data.aw_auth_token_expiry) <= Date.now()) {
+                status.tokenExpired = true;
+            }
+            updateBadge(status, data.aw_config);
         }).catch(() => {});
     }
 });
@@ -156,6 +192,8 @@ async function doBackgroundWork(isManual = false) {
             'aw_config',
             'aw_auth_token',
             'aw_auth_token_expiry',
+            'aw_worker_running',
+            'aw_work_mutex',
             'totalWorked',
             'workToday',
             'totalWorkXP',
@@ -171,10 +209,19 @@ async function doBackgroundWork(isManual = false) {
         const token  = data.aw_auth_token;
         const expiry = data.aw_auth_token_expiry ? Number(data.aw_auth_token_expiry) : 0;
 
-        if (!isManual && status.running === false) return { ok: false, reason: 'paused' };
+        const isRunning = data.aw_worker_running !== 'false' && status.running !== false;
+        if (!isManual && !isRunning) return { ok: false, reason: 'paused' };
+        if (!isManual && status.serverCooldownUntil && Date.now() < status.serverCooldownUntil) {
+            return { ok: false, reason: 'server_cooldown' };
+        }
         if (!isManual && status.lastWorkTimestamp && (Date.now() - status.lastWorkTimestamp < 45000)) {
             return { ok: false, reason: 'cooldown' };
         }
+        const mutex = data.aw_work_mutex || 0;
+        if (!isManual && mutex && Date.now() < mutex) {
+            return { ok: false, reason: 'work_in_flight' };
+        }
+        await chrome.storage.local.set({ aw_work_mutex: Date.now() + 20000 });
         if (!token) return { ok: false, error: 'no_token' };
         if (expiry && expiry <= Date.now()) {
             status.running = false;
@@ -208,11 +255,14 @@ async function doBackgroundWork(isManual = false) {
             return { ok: false, error: 'token_expired' };
         }
 
-        const threshold = config.energyThreshold || 10;
-        if (!isManual && (status.currentEnergy || 0) < threshold) {
+        const isFlush = isEnergyFlushActive(config);
+        const threshold = isFlush ? 10 : (config.energyThreshold || 10);
+        const projEnergy = calculateProjectedEnergy(status.energySyncBase, Date.now());
+        const curEnergy = projEnergy != null ? projEnergy : (status.currentEnergy ?? 0);
+        if (!isManual && curEnergy < threshold) {
             return { ok: false, reason: 'insufficient_energy' };
         }
-        if (isManual && (status.currentEnergy || 0) < 10) {
+        if (isManual && curEnergy < 10) {
             return { ok: false, error: 'insufficient_energy' };
         }
 
@@ -220,7 +270,7 @@ async function doBackgroundWork(isManual = false) {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
+                'Authorization': `Bearer ${token.replace(/^Bearer\s+/i, '').trim()}`,
                 'Accept': '*/*'
             },
             credentials: 'include',
@@ -238,6 +288,12 @@ async function doBackgroundWork(isManual = false) {
 
             if (isZeroEnergy || isZeroXp || resData?.error || (typeof resData?.message === 'string' && /energy|unit/i.test(resData.message))) {
                 status.currentEnergy = 0;
+                status.energySyncBase = {
+                    current: 0,
+                    max: status.maxEnergy || 115,
+                    updatedAt: Date.now(),
+                    regenRate: status.regenRate || 1.0
+                };
                 status.lastLogMessage = `[${nowStr}] Shift tidak menghasilkan XP (energi server belum cukup: 0 EN). Menunggu energi pulih.`;
                 appendBackgroundLog(status.lastLogMessage, 'warn');
                 status.updatedAt = Date.now();
@@ -248,7 +304,7 @@ async function doBackgroundWork(isManual = false) {
             }
 
             // In Parlamentum, a shift consumes all available energy in blocks of 10
-            const availableBlocks = Math.floor((status.currentEnergy || 0) / 10) * 10;
+            const availableBlocks = Math.floor(curEnergy / 10) * 10;
             const energyUsed = Number.isSafeInteger(resEnergyUsed) && resEnergyUsed >= 10
                 ? resEnergyUsed
                 : Math.max(10, availableBlocks);
@@ -258,13 +314,29 @@ async function doBackgroundWork(isManual = false) {
 
             if (xpGained <= 0) {
                 status.currentEnergy = 0;
+                status.energySyncBase = {
+                    current: 0,
+                    max: status.maxEnergy || 115,
+                    updatedAt: Date.now(),
+                    regenRate: status.regenRate || 1.0
+                };
                 status.updatedAt = Date.now();
                 await chrome.storage.local.set({ aw_live_status: status });
                 updateBadge(status, config);
                 return { ok: false, reason: 'zero_gain' };
             }
 
-            status.currentEnergy = Math.max(0, (status.currentEnergy || 0) - energyUsed);
+            if (resData?.energy != null && typeof resData.energy === 'number') {
+                status.currentEnergy = Math.max(0, Math.round(resData.energy));
+            } else {
+                status.currentEnergy = Math.max(0, curEnergy - energyUsed);
+            }
+            status.energySyncBase = {
+                current: status.currentEnergy,
+                max: status.maxEnergy || 115,
+                updatedAt: Date.now(),
+                regenRate: status.regenRate || 1.0
+            };
             status.workToday     = (status.workToday || 0) + 1;
             status.totalWorked   = (status.totalWorked || 0) + 1;
             status.xpToday       = (status.xpToday || 0) + xpGained;
@@ -276,8 +348,9 @@ async function doBackgroundWork(isManual = false) {
             status.lastLogMessage = `[${nowStr}] Shift sukses (Background): +${xpGained} XP${unitsPart}`;
             appendBackgroundLog(status.lastLogMessage, 'success');
             status.updatedAt     = Date.now();
-            const neededMs = Math.max(1, (config.energyThreshold || 90) - status.currentEnergy) * 60000;
-            status.nextWorkTimestamp = Date.now() + neededMs;
+            const rate = Math.max(0.5, status.regenRate || 1.0);
+            const neededMins = Math.max(1, ((config.energyThreshold || 90) - status.currentEnergy) / rate);
+            status.nextWorkTimestamp = Date.now() + Math.round(neededMins * 60000);
 
             const todayKey = new Date().toDateString();
             let history = data.aw_workHistory || data.aw_work_history || {};
@@ -367,9 +440,17 @@ async function doBackgroundWork(isManual = false) {
             // 2. Insufficient Energy Error
             const isEnergyErr = /(insufficient[_ ]energy|not enough energy|energi.{0,40}(?:tidak|belum|kurang)|produce even one unit)/i.test(combined);
             if (isEnergyErr) {
-                const curEnergy = Math.max(0, Number(status.currentEnergy) || 0);
+                status.currentEnergy = 0;
+                status.energySyncBase = {
+                    current: 0,
+                    max: status.maxEnergy || 115,
+                    updatedAt: Date.now(),
+                    regenRate: status.regenRate || 1.0
+                };
                 status.updatedAt = Date.now();
-                const neededMs = Math.max(1, (config.energyThreshold || 90) - curEnergy) * 60000;
+                const target = Math.max(20, config.energyThreshold || 90);
+                const rate = Math.max(0.5, status.regenRate || 1.0);
+                const neededMs = Math.max(120000, Math.round((target / rate) * 60000));
                 status.nextWorkTimestamp = Date.now() + neededMs;
                 status.lastLogMessage = serverMsg ? `[${nowStr}] ${serverMsg}` : `[${nowStr}] Energi di server belum cukup.`;
                 appendBackgroundLog(status.lastLogMessage, 'warn');
@@ -395,6 +476,8 @@ async function doBackgroundWork(isManual = false) {
     } catch (err) {
         console.error('[doBackgroundWork] Error:', err);
         return { ok: false, error: err.message };
+    } finally {
+        await chrome.storage.local.set({ aw_work_mutex: 0 }).catch(() => {});
     }
 }
 
@@ -418,7 +501,10 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const data = await chrome.storage.local.get(['aw_live_status', 'aw_config']);
                 const status = data.aw_live_status || {};
                 status.running = msg.value;
-                await chrome.storage.local.set({ aw_live_status: status });
+                await chrome.storage.local.set({
+                    aw_live_status: status,
+                    aw_worker_running: String(msg.value)
+                });
                 updateBadge(status, data.aw_config);
 
                 // Notify all open tabs to keep them synchronized
@@ -434,8 +520,11 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
                 const tabs = await chrome.tabs.query({ url: '*://parlamentum.org/*' });
                 let worked = false;
 
-                // Pick best tab: active tab first, or any open tab
-                const targetTab = tabs?.find(t => t.active) || tabs?.[0];
+                // Pick best tab: active dashboard tab first, then any dashboard tab, then active tab, then tabs[0]
+                const targetTab = tabs?.find(t => t.active && isDashUrl(t.url)) ||
+                                  tabs?.find(t => isDashUrl(t.url)) ||
+                                  tabs?.find(t => t.active) ||
+                                  tabs?.[0];
 
                 if (targetTab) {
                     try {
@@ -473,7 +562,24 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return false;
 });
 
-// ── Tab Anti-Discard & Wake Protection ─────────────────────────────────────
+// ── Tab Presence & Leadership Registry ─────────────────────────────────────
+function isDashUrl(url) {
+    if (!url) return false;
+    try {
+        const u = new URL(url);
+        const p = u.pathname.toLowerCase().replace(/\/+$/, '');
+        return p === '/dashboard' || p === '';
+    } catch { return false; }
+}
+
+async function updateDashboardTabPresence() {
+    try {
+        const tabs = await chrome.tabs.query({ url: '*://parlamentum.org/*' });
+        const hasDash = tabs?.some(t => isDashUrl(t.url)) || false;
+        await chrome.storage.local.set({ aw_has_dashboard_tab: hasDash });
+    } catch { /* ignore */ }
+}
+
 function protectTabFromDiscard(tabId) {
     try {
         chrome.tabs.update(tabId, { autoDiscardable: false }, () => {
@@ -485,14 +591,23 @@ function protectTabFromDiscard(tabId) {
 chrome.tabs.onCreated.addListener(tab => {
     if (tab?.url && tab.url.includes('parlamentum.org')) {
         protectTabFromDiscard(tab.id);
+        updateDashboardTabPresence();
     }
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
     if (tab?.url && tab.url.includes('parlamentum.org')) {
         protectTabFromDiscard(tabId);
+        updateDashboardTabPresence();
     }
 });
+
+chrome.tabs.onRemoved.addListener(() => {
+    updateDashboardTabPresence();
+});
+
+// Run once on worker boot
+updateDashboardTabPresence();
 
 // ── Background Alarms Worker (every 1 minute) ──────────────────────────────
 try {
@@ -503,15 +618,37 @@ try {
     });
 } catch { /* ignore */ }
 
+function isEnergyFlushActive(config) {
+    if (!config?.energyFlushEnabled) return false;
+    const now = new Date();
+    return now.getUTCHours() === 23 && now.getUTCMinutes() >= 15;
+}
+
 chrome.alarms.onAlarm.addListener(async (alarm) => {
     if (alarm.name !== 'aw_background_tick') return;
 
     try {
-        const data = await chrome.storage.local.get(['aw_live_status', 'aw_config']);
+        const data = await chrome.storage.local.get(['aw_live_status', 'aw_config', 'aw_worker_running']);
         const status = data.aw_live_status;
         const config = parseConfig(data.aw_config);
 
-        if (!status || status.running === false) return;
+        if (!status || status.running === false || data.aw_worker_running === 'false') return;
+
+        // Check Server Cooldown penalty
+        if (status.serverCooldownUntil && Date.now() < status.serverCooldownUntil) {
+            updateBadge(status, config);
+            return;
+        }
+
+        // Check Micro-Breaks or Network Backoff
+        if (status.microBreakUntil && Date.now() < status.microBreakUntil) {
+            updateBadge(status, config);
+            return;
+        }
+        if (status.backoffUntil && Date.now() < status.backoffUntil) {
+            updateBadge(status, config);
+            return;
+        }
 
         // 1. Check Sleep Schedule
         if (config.sleepScheduleEnabled) {
@@ -522,28 +659,32 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
             if (inSleep) return;
         }
 
-        const threshold = config.energyThreshold || 10;
+        // Energy Flush support
+        const isFlush = isEnergyFlushActive(config);
+        const threshold = isFlush ? 10 : (config.energyThreshold || 10);
 
-        // 2. Query open tabs to execute work natively in tab context
+        // 2. Query open tabs first to get authoritative ground truth from game DOM
         const tabs = await chrome.tabs.query({ url: '*://parlamentum.org/*' });
+        let workedInTab = false;
+        let tabHandledWorker = false;
+        let bestEnergy = null;
+        let bestEnergySyncBase = null;
+
         if (tabs && tabs.length > 0) {
-            // Sort tabs: active foreground tab first, then /dashboard tab, then others
+            // Dashboard tabs ALWAYS take absolute priority over non-dashboard tabs (e.g. /map, /pasar)
             tabs.sort((a, b) => {
+                const aDash = isDashUrl(a.url) ? 1 : 0;
+                const bDash = isDashUrl(b.url) ? 1 : 0;
+                if (aDash !== bDash) return bDash - aDash;
                 if (a.active && !b.active) return -1;
                 if (!a.active && b.active) return 1;
-                const aDash = (a.url && a.url.includes('/dashboard')) ? 1 : 0;
-                const bDash = (b.url && b.url.includes('/dashboard')) ? 1 : 0;
-                return bDash - aDash;
+                return 0;
             });
 
-            let lockOwnerTab = null;
-            let bestEnergy = null;
-            let workedInTab = false;
-
+            // Target open tabs (dashboard first)
             for (const tab of tabs) {
                 protectTabFromDiscard(tab.id);
 
-                // If tab was discarded by browser memory saver, reload it
                 if (tab.discarded) {
                     chrome.tabs.reload(tab.id);
                     continue;
@@ -551,7 +692,7 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
 
                 try {
                     const res = await new Promise(resolve => {
-                        const timer = setTimeout(() => resolve(null), 12000);
+                        const timer = setTimeout(() => resolve(null), 8000);
                         chrome.tabs.sendMessage(tab.id, { type: 'WAKE_WORKER' }, r => {
                             clearTimeout(timer);
                             if (chrome.runtime.lastError || !r) resolve(null);
@@ -560,16 +701,22 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
                     });
 
                     if (res && res.handled) {
-                        if (res.isLockOwner) {
-                            lockOwnerTab = tab;
-                        }
-                        if (res.energy != null) {
-                            if (bestEnergy == null || res.energy > bestEnergy) {
-                                bestEnergy = res.energy;
+                        tabHandledWorker = true;
+                        const isThisTabDashboard = isDashUrl(tab.url);
+                        if (res.worked || res.isLockOwner || isThisTabDashboard) {
+                            bestEnergy = res.energy;
+                            if (res.energySyncBase) bestEnergySyncBase = res.energySyncBase;
+                            if (res.worked) {
+                                workedInTab = true;
                             }
+                            // Master leader tab, Dashboard tab, or tab that executed work responded
+                            break;
+                        } else if (bestEnergy == null && res.energy != null && !tabs.some(t => isDashUrl(t.url))) {
+                            // Only fallback to non-dashboard tab if NO dashboard tab exists at all!
+                            bestEnergy = res.energy;
+                            if (res.energySyncBase) bestEnergySyncBase = res.energySyncBase;
                         }
                         if (res.worked) {
-                            // Shift was executed inside WAKE_WORKER!
                             workedInTab = true;
                             break;
                         }
@@ -578,57 +725,69 @@ chrome.alarms.onAlarm.addListener(async (alarm) => {
             }
 
             if (bestEnergy != null) {
-                if (status.currentEnergy !== bestEnergy || !status.updatedAt) {
-                    status.currentEnergy = bestEnergy;
-                    status.updatedAt = Date.now();
+                const freshData = await chrome.storage.local.get(['aw_live_status']);
+                const liveStatus = freshData.aw_live_status || status;
+                liveStatus.currentEnergy = bestEnergy;
+                if (bestEnergySyncBase) {
+                    liveStatus.energySyncBase = bestEnergySyncBase;
+                } else if (!liveStatus.energySyncBase || Math.abs(calculateProjectedEnergy(liveStatus.energySyncBase, Date.now()) - bestEnergy) >= 1) {
+                    liveStatus.energySyncBase = {
+                        current: bestEnergy,
+                        max: liveStatus.maxEnergy || status.maxEnergy || 115,
+                        updatedAt: Date.now(),
+                        regenRate: liveStatus.regenRate || status.regenRate || 1.0
+                    };
                 }
-                await chrome.storage.local.set({ aw_live_status: status });
-                updateBadge(status, config);
+                liveStatus.updatedAt = Date.now();
+                await chrome.storage.local.set({ aw_live_status: liveStatus });
+                updateBadge(liveStatus, config);
             }
 
-            if (workedInTab) return;
+            if (workedInTab || tabHandledWorker) return;
 
-            // If a shift was executed within the last 45 seconds, prevent duplicate execution
+            // Tabs are open, but NONE of them responded to WAKE_WORKER (e.g. tabs completely dead/crashed/frozen).
+            // Only if energy is already at or above threshold, execute the shift directly via Service Worker!
             const nowMs = Date.now();
-            if (status.lastWorkTimestamp && (nowMs - status.lastWorkTimestamp < 45000)) {
-                return;
-            }
+            const hasRecentWork = status.lastWorkTimestamp && (nowMs - status.lastWorkTimestamp < 35000);
+            const curEnergy = bestEnergy != null ? bestEnergy : Number(status.currentEnergy || 0);
 
-            // Tabs are open, but NONE of them executed work (e.g. background tab throttling or sleeping tab).
-            // If energy is already at or above threshold, execute the shift directly via Service Worker!
-            const curEnergy = Number(status.currentEnergy);
-            if (Number.isFinite(curEnergy) && curEnergy >= threshold) {
-                console.log('[Background Alarm] Tab terbuka tetapi tidak mengeksekusi shift (kemungkinan background throttling). Menjalankan via Background Worker...');
+            if (!hasRecentWork && curEnergy >= threshold) {
+                console.log(`[Background Alarm] Tab tidak merespons tick alarm (energi: ${curEnergy}/${threshold}). Menjalankan via Background Worker...`);
+                await doBackgroundWork(false);
+            }
+            return;
+        } else {
+            // Passive Regeneration & Badge Synchronization ONLY when NO tabs are open
+            // Calculate smooth mathematical regen from fixed anchor (zero drift across ticks)
+            const now = Date.now();
+            const syncBase = status.energySyncBase || {
+                current: status.currentEnergy ?? 0,
+                max: status.maxEnergy || 115,
+                updatedAt: status.updatedAt || now,
+                regenRate: status.regenRate || 1.0
+            };
+            if (status.regenRate && syncBase.regenRate !== status.regenRate) {
+                syncBase.regenRate = status.regenRate;
+            }
+            status.energySyncBase = syncBase;
+            const projectedEnergy = calculateProjectedEnergy(syncBase, now);
+            if (status.currentEnergy !== projectedEnergy) {
+                status.currentEnergy = projectedEnergy;
+                status.updatedAt = now;
+                await chrome.storage.local.set({ aw_live_status: status });
+            }
+            updateBadge(status, config);
+
+            // 4. Fallback: ONLY when NO tabs are open (0 open tabs)
+            const nowMs = Date.now();
+            const hasRecentWork = status.lastWorkTimestamp && (nowMs - status.lastWorkTimestamp < 35000);
+            const curEnergy = Number(status.currentEnergy || 0);
+
+            if (!hasRecentWork && curEnergy >= threshold) {
+                console.log(`[Background Alarm] Tidak ada tab terbuka dan energi >= threshold (${curEnergy}/${threshold}). Menjalankan via Background Worker...`);
                 await doBackgroundWork(false);
                 return;
             }
-
-            return;
-        }
-
-        // 3. Fallback: ONLY when NO tabs are open (0 open tabs)
-        // Natural passive energy regeneration with city health buff
-        const now = Date.now();
-        if (status.currentEnergy != null && status.updatedAt && status.currentEnergy < (status.maxEnergy || 115)) {
-            const elapsedMins = (now - status.updatedAt) / 60000;
-            const regenRate = status.regenRate || 1.0;
-            const gained = Math.floor(elapsedMins * regenRate);
-            if (gained > 0) {
-                const max = status.maxEnergy || 115;
-                status.currentEnergy = Math.min(max, status.currentEnergy + gained);
-                status.updatedAt = now;
-                await chrome.storage.local.set({ aw_live_status: status });
-                updateBadge(status, config);
-            }
-        }
-
-        const nowMs = Date.now();
-        if (status.lastWorkTimestamp && (nowMs - status.lastWorkTimestamp < 45000)) {
-            return;
-        }
-
-        if (status.currentEnergy != null && status.currentEnergy >= threshold) {
-            await doBackgroundWork(false);
         }
     } catch (err) {
         console.error('[Background Alarm] Error:', err);

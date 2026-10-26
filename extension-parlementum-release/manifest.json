@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Parlamentum Auto Worker",
-  "version": "5.11.0",
+  "version": "5.12.2",
   "description": "Smart auto worker, analytics, and efficiency dashboard for Parlamentum.org",
   "permissions": [
     "storage",

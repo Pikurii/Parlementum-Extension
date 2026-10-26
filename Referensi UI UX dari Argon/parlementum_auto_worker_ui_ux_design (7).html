@@ -1,0 +1,1524 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parlementum Auto Worker — UI/UX Design System & Interactive Prototype v5.16</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cyber: {
+              bg: '#0a0e1a',
+              card: 'rgba(22, 27, 42, 0.75)',
+              cardSolid: '#161b2a',
+              elevated: 'rgba(30, 38, 58, 0.85)',
+              cyan: '#38bdf8',
+              indigo: '#6366f1',
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              rose: '#f43f5e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ==========================================================================
+       PARLEMENTUM AUTO WORKER — CORE DESIGN TOKENS & GLASSMORPHISM CSS
+       ========================================================================== */
+    :root {
+      --bg-abyss: #0a0e1a;
+      --surface-card: rgba(22, 27, 42, 0.75);
+      --surface-elevated: rgba(30, 39, 59, 0.82);
+      --surface-inner: rgba(13, 18, 30, 0.72);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(56, 189, 248, 0.32);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-abyss);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.05) 0%, transparent 45%),
+        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-x: hidden;
+    }
+
+    .tabular-nums {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    .paw-shell {
+      background: rgba(13, 18, 30, 0.88);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 
+        0 24px 48px -12px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(56, 189, 248, 0.06),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .paw-card {
+      background: var(--surface-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+      transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+    }
+
+    .paw-card:hover {
+      border-color: rgba(56, 189, 248, 0.28);
+      background: rgba(26, 33, 52, 0.82);
+    }
+
+    .paw-well {
+      background: var(--surface-inner);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    @keyframes pulseRed {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(244, 63, 94, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(244, 63, 94, 0); }
+    }
+
+    @keyframes pulseAmber {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(245, 158, 11, 0.35); }
+      50% { opacity: 0.72; box-shadow: 0 0 4px rgba(245, 158, 11, 0.1); }
+    }
+
+    @keyframes shimmerBar {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .status-dot-active {
+      animation: pulseRing 2s infinite;
+    }
+
+    .status-dot-paused {
+      animation: pulseRed 2s infinite;
+      background-color: #f43f5e !important;
+    }
+
+    .badge-flush-pulse {
+      animation: pulseAmber 2.2s infinite ease-in-out;
+    }
+
+    .energy-progress-fill {
+      background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 45%, #818cf8 85%, #38bdf8 100%);
+      background-size: 200% 100%;
+      animation: shimmerBar 5s infinite linear;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Low-Profile Neutral OFF Badge */
+    .badge-train-off {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      color: #94a3b8;
+    }
+
+    /* Stat Card Checkbox & Dimming System */
+    .stat-card {
+      position: relative;
+      background: var(--surface-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 0.75rem;
+      transition:
+        opacity 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        filter 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        border-color 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        box-shadow 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        background 0.28s cubic-bezier(0.16, 1, 0.3, 1),
+        transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stat-card.active {
+      opacity: 1;
+      filter: grayscale(0%);
+    }
+
+    .stat-card.active.theme-str {
+      border-color: rgba(244, 63, 94, 0.45);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(244, 63, 94, 0.12) 0%, transparent 70%),
+        rgba(22, 27, 42, 0.85);
+      box-shadow:
+        0 8px 24px -6px rgba(244, 63, 94, 0.18),
+        inset 0 1px 0 0 rgba(244, 63, 94, 0.25);
+    }
+
+    .stat-card.active.theme-edu {
+      border-color: rgba(56, 189, 248, 0.45);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.12) 0%, transparent 70%),
+        rgba(22, 27, 42, 0.85);
+      box-shadow:
+        0 8px 24px -6px rgba(56, 189, 248, 0.18),
+        inset 0 1px 0 0 rgba(56, 189, 248, 0.25);
+    }
+
+    .stat-card.active.theme-eko {
+      border-color: rgba(16, 185, 129, 0.45);
+      background:
+        radial-gradient(circle at 50% 0%, rgba(16, 185, 129, 0.12) 0%, transparent 70%),
+        rgba(22, 27, 42, 0.85);
+      box-shadow:
+        0 8px 24px -6px rgba(16, 185, 129, 0.18),
+        inset 0 1px 0 0 rgba(16, 185, 129, 0.25);
+    }
+
+    .stat-card.dimmed {
+      opacity: 0.42;
+      filter: grayscale(65%);
+      border-color: rgba(255, 255, 255, 0.06);
+      background: rgba(13, 17, 28, 0.65);
+      box-shadow: none;
+    }
+
+    .stat-card.dimmed:hover {
+      opacity: 0.62;
+      filter: grayscale(35%);
+      border-color: rgba(255, 255, 255, 0.14);
+    }
+
+    .stat-checkbox-box {
+      width: 20px;
+      height: 20px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stat-checkbox-svg {
+      stroke-dasharray: 24;
+      stroke-dashoffset: 0;
+      transition: stroke-dashoffset 0.22s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .stat-card.dimmed .stat-checkbox-svg {
+      stroke-dashoffset: 24;
+    }
+
+    /* Input Number Reset */
+    input[type="number"]::-webkit-inner-spin-button,
+    input[type="number"]::-webkit-outer-spin-button {
+      -webkit-appearance: none;
+      margin: 0;
+    }
+
+    input[type="number"] {
+      -moz-appearance: textfield;
+      appearance: textfield;
+    }
+
+    .stat-target-input {
+      width: 70px;
+      height: 32px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 14px;
+      border-radius: 8px;
+      transition: all 0.2s ease;
+    }
+
+    .paw-gold-input {
+      width: 96px;
+      height: 32px;
+      text-align: center;
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 8px;
+      background: rgba(10, 14, 26, 0.92);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    }
+
+    .paw-gold-input:focus {
+      outline: none;
+      border-color: rgba(245, 158, 11, 0.75);
+      box-shadow: 0 0 12px rgba(245, 158, 11, 0.22);
+      background: rgba(15, 23, 42, 0.98);
+    }
+
+    /* Custom Select Dropdown */
+    .paw-select-wrapper {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .paw-select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      background-color: rgba(13, 18, 30, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.38);
+      border-radius: 0.625rem;
+      padding: 0.4rem 2.25rem 0.4rem 0.75rem;
+      font-size: 12px;
+      font-weight: 600;
+      color: #7dd3fc;
+      cursor: pointer;
+      transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+    }
+
+    .paw-select:hover {
+      background-color: rgba(22, 29, 47, 0.98);
+      border-color: rgba(56, 189, 248, 0.65);
+    }
+
+    .paw-select:focus {
+      outline: none;
+      border-color: #38bdf8;
+      box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.2);
+    }
+
+    .paw-select option {
+      background-color: #0f172a;
+      color: #f1f5f9;
+      padding: 8px;
+    }
+
+    .paw-select-chevron {
+      position: absolute;
+      right: 0.65rem;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      transition: transform 0.2s ease, color 0.2s ease;
+    }
+
+    .paw-select-wrapper:focus-within .paw-select-chevron {
+      transform: translateY(-50%) rotate(180deg);
+      color: #38bdf8;
+    }
+
+    /* Accordion */
+    .collapsible-card {
+      transition: padding 0.28s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.28s ease, background-color 0.28s ease;
+    }
+
+    .collapsible-card.collapsed {
+      min-height: 44px;
+      padding: 10px 14px !important;
+    }
+
+    .collapsible-body {
+      display: grid;
+      grid-template-rows: 1fr;
+      opacity: 1;
+      transition:
+        grid-template-rows 0.32s cubic-bezier(0.16, 1, 0.3, 1),
+        opacity 0.24s cubic-bezier(0.16, 1, 0.3, 1),
+        margin-top 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .collapsible-card.expanded .collapsible-body,
+    .collapsible-body.expanded {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-top: 0.625rem;
+    }
+
+    .collapsible-card.collapsed .collapsible-body,
+    .collapsible-body.collapsed {
+      grid-template-rows: 0fr;
+      opacity: 0;
+      margin-top: 0rem;
+      pointer-events: none;
+    }
+
+    .collapsible-inner {
+      overflow: hidden;
+      min-height: 0;
+    }
+
+    .mini-stat-pill {
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .mini-stat-pill.dimmed {
+      opacity: 0.4;
+      filter: grayscale(75%);
+      border-left-color: rgba(148, 163, 184, 0.3) !important;
+    }
+
+    input[type="range"].paw-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      outline: none;
+    }
+
+    input[type="range"].paw-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0a0e1a;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      cursor: pointer;
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+
+    input[type="range"].paw-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.12);
+      background: #7dd3fc;
+    }
+
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(10, 14, 26, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.5);
+    }
+
+    .btn-cyber {
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-cyber:active {
+      transform: translateY(1px) scale(0.985);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- ==========================================================================
+       TOP SHOWCASE HEADER
+       ========================================================================== -->
+  <header class="sticky top-0 z-40 border-b border-white/10 bg-[#0a0e1a]/90 backdrop-blur-xl">
+    <div class="max-w-[1540px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <circle cx="12" cy="5" r="2"></circle>
+            <path d="M12 7v4"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-[14px] font-bold tracking-wider uppercase text-white">Parlementum Auto Worker</h1>
+            <span class="px-2 py-0.5 text-[12px] font-medium rounded-full bg-sky-500/15 text-sky-300 border border-sky-400/30 tabular-nums">UI/UX v5.16.5</span>
+          </div>
+          <p class="text-[12px] text-slate-400">Fintech Glassmorphism Dark Mode • Single Dot OFF Badge • State Paused Sync</p>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-white/10">
+        <button onclick="setShowcaseView('all')" id="nav-btn-all" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center gap-1.5">
+          <span>Semua Permukaan (A+B+C)</span>
+        </button>
+        <button onclick="setShowcaseView('surface-c')" id="nav-btn-surface-c" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-medium text-emerald-300 hover:text-white border border-emerald-400/25 bg-emerald-500/10 flex items-center gap-1.5">
+          <span>Fokus Demo: Tab Latihan Stats</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Interactive Toast Notification Container -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==========================================================================
+       MAIN WORKSPACE
+       ========================================================================== -->
+  <main class="flex-1 max-w-[1540px] w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- Surfaces Container -->
+    <div id="surfaces-grid" class="flex flex-wrap xl:flex-nowrap justify-center items-start gap-6">
+
+      <!-- ======================================================================
+           SURFACE A: FLOATING IN-GAME PANEL (356px)
+           ====================================================================== -->
+      <section id="section-surface-a" class="w-[356px] max-w-full shrink-0 flex flex-col items-center">
+        <div class="w-[356px] max-w-full mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/30 text-sky-300 font-mono text-[12px] font-semibold">PERMUKAAN A</span>
+            <h2 class="text-[13px] font-semibold text-white">Floating In-Game Panel</h2>
+          </div>
+          <span class="text-[12px] font-mono text-slate-400">356px</span>
+        </div>
+
+        <!-- Mode 2: Floating Pill Capsule (Hidden by Default) -->
+        <div id="aw-pill-container" class="w-[356px] max-w-full mb-3.5 hidden">
+          <div class="flex items-center justify-between mb-1.5 px-1">
+            <span class="text-[12px] font-medium text-slate-400">Mode 2: Floating Pill Capsule (36px)</span>
+            <button onclick="togglePanelMode()" class="text-[12px] text-sky-400 font-medium underline">Buka Panel Penuh</button>
+          </div>
+          <div class="paw-shell h-[36px] px-3 rounded-full flex items-center justify-between gap-2 border border-sky-400/25 shadow-[0_10px_25px_rgba(0,0,0,0.65)]">
+            <div class="flex items-center gap-2">
+              <div class="text-sky-400 flex items-center">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                  <circle cx="12" cy="5" r="2"></circle>
+                </svg>
+              </div>
+              <span id="pill-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 status-dot-active"></span>
+            </div>
+            <div class="px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/25 flex items-center gap-1 text-sky-300">
+              <span class="text-[13px] font-semibold tabular-nums">44/210</span>
+            </div>
+            <div class="px-2 py-0.5 rounded-full bg-slate-800/90 border border-white/10 flex items-center gap-1 text-slate-200">
+              <span class="text-[13px] font-medium tabular-nums">37m</span>
+            </div>
+            <div class="flex items-center gap-1">
+              <button onclick="toggleBotPause()" class="btn-cyber w-6 h-6 rounded-full bg-rose-500/20 border border-rose-400/30 flex items-center justify-center text-rose-300">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>
+              </button>
+              <button onclick="togglePanelMode()" class="btn-cyber w-6 h-6 rounded-full bg-slate-800 border border-white/10 flex items-center justify-center text-slate-300">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"></polyline><polyline points="9 21 3 21 3 15"></polyline></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Mode 1: Expanded Panel A -->
+        <div id="aw-full-container" class="w-[356px] max-w-full transition-all duration-300">
+          <div class="flex items-center justify-between mb-1.5 px-1">
+            <span class="text-[12px] font-medium text-slate-400">Mode 1: Expanded Panel (356px)</span>
+            <button onclick="togglePanelMode()" class="text-[12px] text-sky-400 font-medium underline">Ubah ke Kapsul Ramping</button>
+          </div>
+
+          <div class="paw-shell rounded-2xl p-3.5 flex flex-col gap-2.5 relative overflow-hidden">
+            <div class="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent"></div>
+
+            <div class="flex items-center justify-between pb-2 border-b border-white/10">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                    <circle cx="12" cy="5" r="2"></circle>
+                  </svg>
+                </div>
+                <span class="text-[13px] font-bold tracking-wider text-white uppercase">AUTO WORKER</span>
+                <span id="header-status-dot-a" class="w-2.5 h-2.5 rounded-full bg-emerald-400 status-dot-active"></span>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="togglePanelMode()" title="Mode Kapsul" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 border border-white/10 flex items-center justify-center text-slate-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="4 14 10 14 10 20"></polyline><polyline points="20 10 14 10 14 4"></polyline></svg>
+                </button>
+                <button onclick="focusSurfaceC()" title="Pengaturan" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 border border-white/10 flex items-center justify-center text-slate-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Location & UTC Reset -->
+            <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
+                  <span class="text-[12px] text-slate-400">Lokasi:</span>
+                  <span class="text-[13px] font-semibold text-white">Jakarta</span>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold tabular-nums">+50% Regen</span>
+              </div>
+              <div class="h-[1px] bg-white/5"></div>
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
+                  <span id="utc-clock-a" class="text-[13px] font-semibold text-slate-200 tabular-nums">13:34:20 UTC</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span id="utc-reset-a" class="text-[12px] text-slate-300 tabular-nums">Reset: 10j 41m</span>
+                  <span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[12px] font-bold tabular-nums badge-flush-pulse">FLUSH</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bread Quota Tracker -->
+            <div class="paw-card rounded-xl p-2.5 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/25 flex items-center justify-center text-amber-300 shrink-0">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 8h1a4 4 0 0 1 0 8h-1"></path><path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path></svg>
+                </div>
+                <div>
+                  <div class="text-[12px] text-slate-400 font-medium">Kuota Roti Harian</div>
+                  <div id="bread-counter-a" class="text-[13px] font-semibold text-white tabular-nums">9/20 • 11 sisa</div>
+                </div>
+              </div>
+              <div class="flex items-center gap-1">
+                <button onclick="adjustBread(-1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center">-</button>
+                <button onclick="adjustBread(1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center">+</button>
+                <button onclick="setBreadMax()" class="btn-cyber px-2.5 h-7 rounded-lg bg-amber-500/15 border border-amber-400/30 text-amber-300 font-mono text-[12px] font-semibold">Max</button>
+              </div>
+            </div>
+
+            <!-- Live Energy Card -->
+            <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+              <div class="flex items-baseline justify-between">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                  <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">ENERGI</span>
+                </div>
+                <div class="flex items-baseline gap-1">
+                  <span class="text-[20px] font-bold text-white tabular-nums leading-none">44/210</span>
+                  <span class="text-[12px] text-sky-400 font-mono tabular-nums">(21%)</span>
+                </div>
+              </div>
+              <div class="w-full h-2.5 rounded-full bg-slate-900/95 border border-white/10 overflow-hidden p-0.5">
+                <div class="h-full rounded-full energy-progress-fill" style="width: 21%;"></div>
+              </div>
+            </div>
+
+            <!-- Work Focus Card -->
+            <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-2">
+              <div class="flex flex-col gap-1">
+                <span id="work-status-pill-a" class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold">Auto Kerja: AKTIF</span>
+                <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-0.5">
+                  <span>Target Ambang:</span>
+                  <span id="work-threshold-badge-a" class="px-1.5 py-0.2 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 font-semibold tabular-nums">&gt;= 100 EN</span>
+                </div>
+              </div>
+              <div class="paw-well px-3 py-1.5 rounded-xl text-right">
+                <div class="text-[12px] text-slate-400">Hitung Mundur</div>
+                <div id="work-countdown-large-a" class="text-[18px] font-bold text-white tabular-nums tracking-tight">00:37:19</div>
+              </div>
+            </div>
+
+            <!-- Latihan Stats Card A (Low-Profile OFF Badge with 1 clean dot) -->
+            <div id="stats-card-container-a" class="paw-card collapsible-card expanded rounded-xl p-3 flex flex-col">
+              <div class="flex items-center justify-between min-h-[28px] px-0.5">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"></path></svg>
+                  <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">LATIHAN STATS</span>
+                  <span id="panel-a-active-stat-count" class="px-1.5 py-0.2 rounded bg-rose-500/15 border border-rose-400/30 text-rose-300 font-mono text-[12px] font-semibold tabular-nums">1/3 Aktif</span>
+                </div>
+                <button onclick="toggleStatsTraining()" id="stats-toggle-badge-a" class="btn-cyber px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1 shadow-sm">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>AKTIF</span>
+                </button>
+              </div>
+
+              <div id="stats-accordion-body-a" class="collapsible-body expanded">
+                <div class="collapsible-inner flex flex-col gap-2.5 pt-1">
+                  <div class="grid grid-cols-3 gap-2">
+                    <div onclick="toggleStatCard('str')" id="mini-pill-str-a" class="cursor-pointer mini-stat-pill paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-rose-400">
+                      <span class="text-[12px] font-semibold text-rose-300">STR</span>
+                      <span class="text-[14px] font-bold text-white tabular-nums">82</span>
+                    </div>
+                    <div onclick="toggleStatCard('edu')" id="mini-pill-edu-a" class="cursor-pointer mini-stat-pill dimmed paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-sky-400">
+                      <span class="text-[12px] font-medium text-slate-400">EDU</span>
+                      <span class="text-[14px] font-bold text-slate-300 tabular-nums">50</span>
+                    </div>
+                    <div onclick="toggleStatCard('eko')" id="mini-pill-eko-a" class="cursor-pointer mini-stat-pill dimmed paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-emerald-400">
+                      <span class="text-[12px] font-medium text-slate-400">EKO</span>
+                      <span class="text-[14px] font-bold text-slate-300 tabular-nums">51</span>
+                    </div>
+                  </div>
+
+                  <div class="paw-well rounded-lg px-2.5 py-2 flex items-center justify-between text-[12px]">
+                    <span class="font-medium text-rose-300">Fokus: Kekuatan Lv 83</span>
+                    <span class="font-semibold text-white tabular-nums">1j 13m</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Auth Session Row -->
+            <div class="paw-card rounded-xl px-3 py-2 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                <span class="text-[12px] text-slate-400">Sesi Token Auth:</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-bold">VALID</span>
+                <span class="text-[13px] font-semibold text-slate-200 tabular-nums">167h 24m</span>
+              </div>
+            </div>
+
+            <!-- 3 Main Action Buttons -->
+            <div class="grid grid-cols-3 gap-2 pt-0.5">
+              <button onclick="triggerManualWork()" class="btn-cyber py-2 px-2 rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 hover:from-sky-400 text-slate-950 font-bold text-[12px] flex items-center justify-center gap-1">
+                <span>Kerja</span>
+              </button>
+              <button id="pause-toggle-btn-a" onclick="toggleBotPause()" class="btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+                <span>Jeda Bot</span>
+              </button>
+              <button onclick="showToast('Log aktivitas dibuka', 'info')" class="btn-cyber py-2 px-2 rounded-xl bg-slate-800/90 border border-white/10 text-slate-200 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+                <span>Log Bot</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SURFACE B: TOOLBAR EXTENSION POPUP (360px)
+           ====================================================================== -->
+      <section id="section-surface-b" class="w-[360px] max-w-full shrink-0 flex flex-col items-center">
+        <div class="w-[360px] max-w-full mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 font-mono text-[12px] font-semibold">PERMUKAAN B</span>
+            <h2 class="text-[13px] font-semibold text-white">Toolbar Extension Popup</h2>
+          </div>
+          <span class="text-[12px] font-mono text-slate-400">360px</span>
+        </div>
+
+        <div class="w-[360px] max-w-full paw-shell rounded-2xl p-3.5 flex flex-col gap-2.5 relative overflow-hidden">
+          <div class="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent"></div>
+
+          <div class="flex items-center justify-between pb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"></rect><circle cx="12" cy="5" r="2"></circle></svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[13px] font-bold tracking-wider text-white uppercase">AUTO WORKER</span>
+                  <span id="header-status-dot-b" class="w-2 h-2 rounded-full bg-emerald-400 status-dot-active"></span>
+                </div>
+                <div class="text-[12px] text-slate-400">Sinkronisasi Lintas Tab</div>
+              </div>
+            </div>
+            <button onclick="focusSurfaceC()" class="btn-cyber px-2.5 py-1.5 rounded-lg bg-slate-800/90 border border-white/10 text-slate-200 text-[12px] font-medium">Pengaturan</button>
+          </div>
+
+          <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path></svg>
+                <span class="text-[12px] text-slate-400">Lokasi:</span>
+                <span class="text-[13px] font-semibold text-white">Jakarta</span>
+              </div>
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold tabular-nums">+50% Regen</span>
+            </div>
+            <div class="h-[1px] bg-white/5"></div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
+                <span id="utc-clock-b" class="text-[13px] font-semibold text-slate-200 tabular-nums">13:34:20 UTC</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[12px] text-slate-300 tabular-nums">Reset: 10j 41m</span>
+                <span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[12px] font-bold tabular-nums badge-flush-pulse">FLUSH</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+            <div class="flex items-baseline justify-between">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+                <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">ENERGI</span>
+              </div>
+              <div class="flex items-baseline gap-1">
+                <span class="text-[20px] font-bold text-white tabular-nums leading-none">44/210</span>
+                <span class="text-[12px] text-sky-400 font-mono tabular-nums">(21%)</span>
+              </div>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-900/95 border border-white/10 overflow-hidden p-0.5">
+              <div class="h-full rounded-full energy-progress-fill" style="width: 21%;"></div>
+            </div>
+          </div>
+
+          <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-2">
+            <div class="flex flex-col gap-1">
+              <span id="work-status-pill-b" class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold w-fit">Auto Kerja: AKTIF</span>
+              <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-0.5">
+                <span>Ambang:</span>
+                <span class="px-1.5 py-0.2 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 font-semibold tabular-nums">&gt;= 100 EN</span>
+              </div>
+            </div>
+            <div class="paw-well px-3 py-1.5 rounded-xl text-right">
+              <div class="text-[12px] text-slate-400">Hitung Mundur</div>
+              <div id="work-countdown-large-b" class="text-[18px] font-bold text-white tabular-nums tracking-tight">00:37:19</div>
+            </div>
+          </div>
+
+          <!-- Latihan Stats Surface B -->
+          <div id="stats-card-container-b" class="paw-card collapsible-card expanded rounded-xl p-3 flex flex-col">
+            <div class="flex items-center justify-between min-h-[28px] px-0.5">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"></path></svg>
+                <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">LATIHAN STATS</span>
+                <span id="panel-b-active-stat-count" class="px-1.5 py-0.2 rounded bg-rose-500/15 border border-rose-400/30 text-rose-300 font-mono text-[12px] font-semibold tabular-nums">1/3 Aktif</span>
+              </div>
+              <button onclick="toggleStatsTraining()" id="stats-toggle-badge-b" class="btn-cyber px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1 shadow-sm">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>AKTIF</span>
+              </button>
+            </div>
+
+            <div id="stats-accordion-body-b" class="collapsible-body expanded">
+              <div class="collapsible-inner flex flex-col gap-2 pt-1">
+                <div class="grid grid-cols-3 gap-2">
+                  <div onclick="toggleStatCard('str')" id="mini-pill-str-b" class="cursor-pointer mini-stat-pill paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-rose-400">
+                    <span class="text-[12px] font-semibold text-rose-300">STR</span>
+                    <span class="text-[14px] font-bold text-white tabular-nums">82</span>
+                  </div>
+                  <div onclick="toggleStatCard('edu')" id="mini-pill-edu-b" class="cursor-pointer mini-stat-pill dimmed paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-sky-400">
+                    <span class="text-[12px] font-medium text-slate-400">EDU</span>
+                    <span class="text-[14px] font-bold text-slate-300 tabular-nums">50</span>
+                  </div>
+                  <div onclick="toggleStatCard('eko')" id="mini-pill-eko-b" class="cursor-pointer mini-stat-pill dimmed paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-emerald-400">
+                    <span class="text-[12px] font-medium text-slate-400">EKO</span>
+                    <span class="text-[14px] font-bold text-slate-300 tabular-nums">51</span>
+                  </div>
+                </div>
+
+                <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between text-[12px]">
+                  <span class="font-medium text-rose-300">Fokus: Kekuatan Lv 83</span>
+                  <span class="font-semibold text-white tabular-nums">1j 13m</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="paw-card rounded-xl px-3 py-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7"></path></svg>
+              <span class="text-[12px] text-slate-400">Sesi Token Auth:</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-bold">VALID</span>
+              <span class="text-[13px] font-semibold text-slate-200 tabular-nums">167h 24m</span>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="triggerManualWork()" class="btn-cyber py-2 px-2 rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 hover:from-sky-400 text-slate-950 font-bold text-[12px] flex items-center justify-center">Kerja</button>
+            <button id="pause-toggle-btn-b" onclick="toggleBotPause()" class="btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center">Jeda Bot</button>
+            <button onclick="showToast('Log aktivitas dibuka', 'info')" class="btn-cyber py-2 px-2 rounded-xl bg-slate-800/90 border border-white/10 text-slate-200 font-semibold text-[12px] flex items-center justify-center">Log Bot</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SURFACE C: SPACIOUS DESKTOP SETTINGS MODAL (Width: 620px)
+           ====================================================================== -->
+      <section id="section-surface-c" class="w-full max-w-[620px] xl:w-[620px] shrink-0 flex flex-col items-center">
+        <div class="w-full mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-mono text-[12px] font-semibold">PERMUKAAN C</span>
+            <h2 class="text-[13px] font-semibold text-white">Spacious Desktop Settings Modal</h2>
+          </div>
+          <span class="px-2 py-0.5 rounded bg-slate-800/90 border border-white/10 text-[12px] font-mono text-sky-300 tabular-nums">Lebar Desktop: 620px</span>
+        </div>
+
+        <div class="w-full paw-shell rounded-2xl overflow-hidden flex flex-col relative">
+          <div class="absolute top-0 left-10 right-10 h-[1px] bg-gradient-to-r from-transparent via-sky-400/70 to-transparent"></div>
+
+          <div class="px-5 py-4 border-b border-white/10 flex items-center justify-between bg-slate-900/50">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle></svg>
+              </div>
+              <div>
+                <h3 class="text-[14px] font-bold tracking-wide text-white uppercase">Pengaturan Auto Worker</h3>
+                <p class="text-[12px] text-slate-400">Konfigurasi Otomasi, Kalkulator Emas &amp; Keamanan Bot</p>
+              </div>
+            </div>
+            <span class="px-3 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold">Auto-Save Aktif</span>
+          </div>
+
+          <!-- 5-Tab Navigation Bar -->
+          <div class="px-5 pt-3 pb-2.5 bg-slate-950/60 border-b border-white/10 grid grid-cols-5 gap-2">
+            <button onclick="switchSettingsTab(1)" id="tab-btn-1" class="btn-cyber py-2 px-2 rounded-xl bg-transparent text-slate-400 flex items-center justify-center gap-1.5 text-center text-[12px]">Kerja</button>
+            <button onclick="switchSettingsTab(2)" id="tab-btn-2" class="btn-cyber py-2 px-2 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 flex items-center justify-center gap-1.5 text-center text-[12px] font-semibold">Stats &amp; Emas</button>
+            <button onclick="switchSettingsTab(3)" id="tab-btn-3" class="btn-cyber py-2 px-2 rounded-xl bg-transparent text-slate-400 flex items-center justify-center gap-1.5 text-center text-[12px]">Stealth</button>
+            <button onclick="switchSettingsTab(4)" id="tab-btn-4" class="btn-cyber py-2 px-2 rounded-xl bg-transparent text-slate-400 flex items-center justify-center gap-1.5 text-center text-[12px]">Suara</button>
+            <button onclick="switchSettingsTab(5)" id="tab-btn-5" class="btn-cyber py-2 px-2 rounded-xl bg-transparent text-slate-400 flex items-center justify-center gap-1.5 text-center text-[12px]">Pintasan</button>
+          </div>
+
+          <!-- Tab Contents -->
+          <div class="p-5 flex flex-col gap-4">
+
+            <!-- TAB 1: KERJA & ENERGI -->
+            <div id="settings-tab-1" class="hidden flex-col gap-3">
+              <div class="paw-card rounded-xl p-3.5 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-[13px] font-semibold text-white">Ambang Batas Energi Kerja</div>
+                    <div class="text-[12px] text-slate-400">Bot mengeksekusi kerja saat energi mencapai batas ini</div>
+                  </div>
+                  <span id="slider-energy-readout" class="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/40 text-sky-300 font-bold text-[14px] tabular-nums">100 EN</span>
+                </div>
+                <input id="energy-threshold-slider" type="range" min="10" max="210" step="5" value="100" oninput="updateEnergyThreshold(this.value)" class="paw-slider" />
+              </div>
+            </div>
+
+            <!-- TAB 2: LATIHAN STATS & KALKULATOR EMAS -->
+            <div id="settings-tab-2" class="flex flex-col">
+
+              <!-- Master Switch & Banner -->
+              <div class="paw-card rounded-xl p-4 flex flex-col">
+                <div class="flex items-center justify-between gap-3 pb-3 border-b border-white/10">
+                  <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-indigo-500/15 border border-indigo-400/30 flex items-center justify-center text-indigo-300 shrink-0">
+                      <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M18 20V10"></path></svg>
+                    </div>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <span class="text-[13px] font-bold text-white">Auto Latihan Stats</span>
+                        <span id="settings-master-state-pill" class="px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-mono font-bold">AKTIF</span>
+                      </div>
+                      <div class="text-[12px] text-slate-400">Matikan sakelar untuk menyembunyikan seluruh konfigurasi latihan &amp; kalkulator</div>
+                    </div>
+                  </div>
+                  <button onclick="toggleStatsTraining()" id="settings-stats-master-switch" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                  </button>
+                </div>
+              </div>
+
+              <!-- Sub-panel Container (Hidden when OFF) -->
+              <div id="settings-stats-wrapper" class="flex flex-col gap-4 mt-3.5 transition-all duration-300">
+
+                <!-- Smart Priority Bar -->
+                <div class="paw-card rounded-xl p-3.5 flex flex-col">
+                  <div id="smart-priority-container" class="flex flex-col">
+                    <div id="priority-single-pill" class="paw-well rounded-xl px-3.5 py-2.5 border border-rose-400/30 bg-rose-500/10 flex items-center justify-between gap-3">
+                      <div class="flex items-center gap-2.5">
+                        <div class="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-400/40 flex items-center justify-center text-rose-300 shrink-0">
+                          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle></svg>
+                        </div>
+                        <div>
+                          <span id="single-focus-badge" class="text-[13px] font-bold text-rose-200 block">Fokus Tunggal: Kekuatan</span>
+                          <span class="text-[12px] text-slate-300">Stat lain yang tidak dicentang otomatis dilewati</span>
+                        </div>
+                      </div>
+                      <span class="px-2.5 py-1 rounded-lg bg-slate-900/90 border border-white/10 text-[12px] font-mono font-semibold text-slate-300 whitespace-nowrap shrink-0">1 Stat Aktif</span>
+                    </div>
+
+                    <div id="priority-multi-dropdown" class="hidden paw-well rounded-xl px-3.5 py-2.5 border border-sky-400/30 bg-sky-500/5 items-center justify-between gap-3">
+                      <div class="flex items-center gap-2.5">
+                        <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"></polyline></svg>
+                        <div>
+                          <div class="text-[13px] font-semibold text-white">Urutan Prioritas Multi-Stat</div>
+                          <div class="text-[12px] text-slate-400">Stat yang dicentang masuk dalam rotasi latihan</div>
+                        </div>
+                      </div>
+                      <div class="paw-select-wrapper shrink-0">
+                        <select id="priority-select" onchange="showToast('Prioritas latihan diubah ke: ' + this.value, 'sky')" class="paw-select">
+                          <!-- Dinamis via JS -->
+                        </select>
+                        <svg class="paw-select-chevron w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"></polyline></svg>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- 3 Spacious Stat Cards -->
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+                  <!-- STR Card -->
+                  <div id="stat-card-str" class="stat-card active theme-str p-4 flex flex-col gap-3">
+                    <div onclick="toggleStatCard('str')" class="cursor-pointer flex items-center justify-between gap-2 pb-2.5 border-b border-white/10 select-none">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-rose-500/20 border border-rose-400/35 flex items-center justify-center text-rose-300 shrink-0">
+                          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 17.5 17.5"></path></svg>
+                        </div>
+                        <span class="text-[14px] font-bold text-white whitespace-nowrap">Kekuatan</span>
+                      </div>
+                      <div id="checkbox-box-str" class="stat-checkbox-box bg-rose-500 border border-rose-300 text-slate-950 shadow-[0_0_10px_rgba(244,63,94,0.5)]">
+                        <svg class="w-3.5 h-3.5 stat-checkbox-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between whitespace-nowrap">
+                      <span class="text-[12px] text-slate-400">Level Saat Ini:</span>
+                      <span class="text-[13px] font-bold text-white tabular-nums">Lv. 82</span>
+                    </div>
+                    <div class="paw-well rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+                      <label for="target-str" class="text-[12px] font-medium text-slate-300 whitespace-nowrap">Target Level</label>
+                      <input id="target-str" type="number" min="82" max="250" value="103" oninput="calculateGoldCosts()" class="stat-target-input bg-slate-950/90 border border-rose-400/40 text-white focus:outline-none" />
+                    </div>
+                    <div class="pt-2 border-t border-white/10 min-h-[30px] flex items-center justify-center">
+                      <div id="footer-active-str" class="w-full flex items-center justify-between whitespace-nowrap text-[12px]">
+                        <span class="text-slate-400">Biaya:</span>
+                        <span id="cost-str-display" class="text-[13px] font-mono font-bold text-rose-300 tabular-nums">1.953 Emas</span>
+                      </div>
+                      <div id="footer-dimmed-str" class="hidden w-full items-center justify-center">
+                        <span class="px-3 py-0.5 rounded-full bg-slate-900/90 border border-white/15 text-[12px] font-mono font-medium text-slate-300 whitespace-nowrap">[ Dilewati ]</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- EDU Card -->
+                  <div id="stat-card-edu" class="stat-card dimmed theme-edu p-4 flex flex-col gap-3">
+                    <div onclick="toggleStatCard('edu')" class="cursor-pointer flex items-center justify-between gap-2 pb-2.5 border-b border-white/10 select-none">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/35 flex items-center justify-center text-sky-300 shrink-0">
+                          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path></svg>
+                        </div>
+                        <span class="text-[14px] font-bold text-white whitespace-nowrap">Pendidikan</span>
+                      </div>
+                      <div id="checkbox-box-edu" class="stat-checkbox-box bg-slate-900 border border-white/25 text-slate-950">
+                        <svg class="w-3.5 h-3.5 stat-checkbox-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between whitespace-nowrap">
+                      <span class="text-[12px] text-slate-400">Level Saat Ini:</span>
+                      <span class="text-[13px] font-bold text-white tabular-nums">Lv. 50</span>
+                    </div>
+                    <div class="paw-well rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+                      <label for="target-edu" class="text-[12px] font-medium text-slate-300 whitespace-nowrap">Target Level</label>
+                      <input id="target-edu" type="number" min="50" max="250" value="100" disabled oninput="calculateGoldCosts()" class="stat-target-input bg-slate-950/90 border border-white/15 text-white focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" />
+                    </div>
+                    <div class="pt-2 border-t border-white/10 min-h-[30px] flex items-center justify-center">
+                      <div id="footer-active-edu" class="hidden w-full items-center justify-between whitespace-nowrap text-[12px]">
+                        <span class="text-slate-400">Biaya:</span>
+                        <span id="cost-edu-display" class="text-[13px] font-mono font-bold text-sky-300 tabular-nums">3.775 Emas</span>
+                      </div>
+                      <div id="footer-dimmed-edu" class="flex w-full items-center justify-center">
+                        <span class="px-3 py-0.5 rounded-full bg-slate-900/90 border border-white/15 text-[12px] font-mono font-medium text-slate-300 whitespace-nowrap">[ Dilewati ]</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- EKO Card -->
+                  <div id="stat-card-eko" class="stat-card dimmed theme-eko p-4 flex flex-col gap-3">
+                    <div onclick="toggleStatCard('eko')" class="cursor-pointer flex items-center justify-between gap-2 pb-2.5 border-b border-white/10 select-none">
+                      <div class="flex items-center gap-2 min-w-0">
+                        <div class="w-7 h-7 rounded-lg bg-emerald-500/20 border border-emerald-400/35 flex items-center justify-center text-emerald-300 shrink-0">
+                          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="1" x2="12" y2="23"></line></svg>
+                        </div>
+                        <span class="text-[14px] font-bold text-white whitespace-nowrap">Ekonomi</span>
+                      </div>
+                      <div id="checkbox-box-eko" class="stat-checkbox-box bg-slate-900 border border-white/25 text-slate-950">
+                        <svg class="w-3.5 h-3.5 stat-checkbox-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>
+                      </div>
+                    </div>
+                    <div class="flex items-center justify-between whitespace-nowrap">
+                      <span class="text-[12px] text-slate-400">Level Saat Ini:</span>
+                      <span class="text-[13px] font-bold text-white tabular-nums">Lv. 51</span>
+                    </div>
+                    <div class="paw-well rounded-xl px-3 py-2 flex items-center justify-between gap-2">
+                      <label for="target-eko" class="text-[12px] font-medium text-slate-300 whitespace-nowrap">Target Level</label>
+                      <input id="target-eko" type="number" min="51" max="250" value="100" disabled oninput="calculateGoldCosts()" class="stat-target-input bg-slate-950/90 border border-white/15 text-white focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed" />
+                    </div>
+                    <div class="pt-2 border-t border-white/10 min-h-[30px] flex items-center justify-center">
+                      <div id="footer-active-eko" class="hidden w-full items-center justify-between whitespace-nowrap text-[12px]">
+                        <span class="text-slate-400">Biaya:</span>
+                        <span id="cost-eko-display" class="text-[13px] font-mono font-bold text-emerald-300 tabular-nums">3.724 Emas</span>
+                      </div>
+                      <div id="footer-dimmed-eko" class="flex w-full items-center justify-center">
+                        <span class="px-3 py-0.5 rounded-full bg-slate-900/90 border border-white/15 text-[12px] font-mono font-medium text-slate-300 whitespace-nowrap">[ Dilewati ]</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Real-Time Gold Calculator -->
+                <div class="paw-card rounded-xl p-4 border border-amber-400/25 flex flex-col gap-3.5">
+                  <div class="flex items-center justify-between gap-2 border-b border-white/10 pb-2.5">
+                    <div class="flex items-center gap-2">
+                      <svg class="w-4 h-4 text-amber-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"></rect></svg>
+                      <span class="text-[12px] font-bold tracking-wider uppercase text-amber-300">Kalkulator Biaya Emas Real-Time</span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                    <div id="breakdown-pill-str" class="paw-well rounded-lg px-3 py-2 border border-rose-400/35 bg-rose-500/10 flex items-center justify-between text-[12px] whitespace-nowrap">
+                      <span class="font-bold text-rose-300 font-mono">STR:</span>
+                      <span id="breakdown-val-str" class="font-mono font-semibold text-white tabular-nums">1.953 Emas</span>
+                    </div>
+                    <div id="breakdown-pill-edu" class="paw-well rounded-lg px-3 py-2 border border-white/5 opacity-45 flex items-center justify-between text-[12px] whitespace-nowrap">
+                      <span class="font-semibold text-slate-400 font-mono">EDU:</span>
+                      <span id="breakdown-val-edu" class="font-mono text-slate-400 tabular-nums">[ Dilewati ]</span>
+                    </div>
+                    <div id="breakdown-pill-eko" class="paw-well rounded-lg px-3 py-2 border border-white/5 opacity-45 flex items-center justify-between text-[12px] whitespace-nowrap">
+                      <span class="font-semibold text-slate-400 font-mono">EKO:</span>
+                      <span id="breakdown-val-eko" class="font-mono text-slate-400 tabular-nums">[ Dilewati ]</span>
+                    </div>
+                  </div>
+
+                  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-stretch">
+                    <div class="paw-well rounded-xl p-3.5 border border-white/10 flex flex-col justify-between gap-2.5">
+                      <div class="flex items-center justify-between gap-2">
+                        <label for="wallet-gold-input" class="text-[12px] text-slate-300 font-medium">Saldo Dompet Emas</label>
+                        <div class="flex items-center gap-1.5">
+                          <input id="wallet-gold-input" type="number" min="0" value="4531" oninput="calculateGoldCosts()" class="paw-gold-input border border-amber-400/35 text-amber-300" />
+                          <span class="text-[12px] text-slate-400 font-mono">Emas</span>
+                        </div>
+                      </div>
+                      <div class="h-[1px] bg-white/5"></div>
+                      <div class="flex items-center justify-between gap-2">
+                        <label for="reserve-gold-input" class="text-[12px] text-slate-300 font-medium">Cadangan Minimal</label>
+                        <div class="flex items-center gap-1.5">
+                          <input id="reserve-gold-input" type="number" min="0" value="50" oninput="calculateGoldCosts()" class="paw-gold-input border border-amber-400/25 text-amber-200" />
+                          <span class="text-[12px] text-slate-400 font-mono">Emas</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div class="paw-well rounded-xl p-3.5 border border-white/10 flex flex-col justify-between gap-2.5">
+                      <div>
+                        <div id="total-gold-label" class="text-[12px] text-slate-400 font-medium">Total Emas Dibutuhkan (1 Stat)</div>
+                        <div id="total-gold-needed" class="text-[20px] font-bold text-white tabular-nums mt-0.5 leading-tight whitespace-nowrap">1.953 Emas</div>
+                      </div>
+                      <div class="pt-2 border-t border-white/10 flex flex-col gap-1">
+                        <span class="text-[12px] text-slate-400">Status Kelayakan Keuangan:</span>
+                        <span id="finance-status-badge" class="w-fit px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tabular-nums whitespace-nowrap">AMAN • Sisa +2.528 Emas</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+              </div>
+
+            </div>
+
+            <!-- TAB 3, 4, 5 -->
+            <div id="settings-tab-3" class="hidden flex-col gap-3">
+              <div class="paw-card rounded-xl p-3.5 text-slate-300 text-[13px]">Pengaturan Stealth &amp; Anti-Bot</div>
+            </div>
+            <div id="settings-tab-4" class="hidden flex-col gap-2.5">
+              <div class="paw-card rounded-xl p-3 text-slate-300 text-[13px]">Pengaturan Suara &amp; Notifikasi</div>
+            </div>
+            <div id="settings-tab-5" class="hidden flex-col gap-2.5">
+              <div class="paw-card rounded-xl p-3 text-slate-300 text-[13px]">Pengaturan Pintasan Keyboard &amp; Tampilan</div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+
+  <!-- ==========================================================================
+       SCRIPT
+       ========================================================================== -->
+  <script>
+    const botState = {
+      isPaused: false,
+      isPillMode: false,
+      statsTrainingActive: true,
+      energyCurrent: 44,
+      breadUsed: 9,
+      breadMax: 20,
+      countdownSeconds: 37 * 60 + 19,
+      currentStats: { str: 82, edu: 50, eko: 51 },
+      statEnabled: { str: true, edu: false, eko: false }
+    };
+
+    const statMeta = {
+      str: { name: 'Kekuatan' },
+      edu: { name: 'Pendidikan' },
+      eko: { name: 'Ekonomi' }
+    };
+
+    function showToast(message, theme = 'sky') {
+      const container = document.getElementById('toast-container');
+      if (!container) return;
+      const themeStyles = {
+        sky: 'border-sky-400/40 bg-slate-900/95 text-sky-200 shadow-[0_8px_24px_rgba(56,189,248,0.2)]',
+        emerald: 'border-emerald-400/40 bg-slate-900/95 text-emerald-200 shadow-[0_8px_24px_rgba(16,185,129,0.2)]',
+        amber: 'border-amber-400/40 bg-slate-900/95 text-amber-200 shadow-[0_8px_24px_rgba(245,158,11,0.2)]',
+        rose: 'border-rose-400/40 bg-slate-900/95 text-rose-200 shadow-[0_8px_24px_rgba(244,63,94,0.2)]',
+        info: 'border-white/15 bg-slate-900/95 text-slate-200 shadow-lg'
+      };
+      const toast = document.createElement('div');
+      toast.className = `px-3.5 py-2 rounded-xl border backdrop-blur-md text-[12px] font-medium flex items-center gap-2 transition-all duration-300 ${themeStyles[theme] || themeStyles.sky}`;
+      toast.innerHTML = `<span class="w-2 h-2 rounded-full bg-current shrink-0"></span><span>${message}</span>`;
+      container.appendChild(toast);
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(6px)';
+        setTimeout(() => toast.remove(), 280);
+      }, 2400);
+    }
+
+    function updateClocksAndTimers() {
+      const now = new Date();
+      const utcH = String(now.getUTCHours()).padStart(2, '0');
+      const utcM = String(now.getUTCMinutes()).padStart(2, '0');
+      const utcS = String(now.getUTCSeconds()).padStart(2, '0');
+      const utcString = `${utcH}:${utcM}:${utcS} UTC`;
+
+      const clockA = document.getElementById('utc-clock-a');
+      const clockB = document.getElementById('utc-clock-b');
+      if (clockA) clockA.textContent = utcString;
+      if (clockB) clockB.textContent = utcString;
+
+      if (!botState.isPaused) {
+        botState.countdownSeconds = botState.countdownSeconds > 0 ? botState.countdownSeconds - 1 : (37 * 60 + 19);
+      }
+
+      const cH = String(Math.floor(botState.countdownSeconds / 3600)).padStart(2, '0');
+      const cM = String(Math.floor((botState.countdownSeconds % 3600) / 60)).padStart(2, '0');
+      const cS = String(botState.countdownSeconds % 60).padStart(2, '0');
+      const formattedLarge = `${cH}:${cM}:${cS}`;
+      const formattedShort = `${Math.floor(botState.countdownSeconds / 60)}m ${cS}s`;
+
+      const largeA = document.getElementById('work-countdown-large-a');
+      const largeB = document.getElementById('work-countdown-large-b');
+      if (largeA) largeA.textContent = formattedLarge;
+      if (largeB) largeB.textContent = formattedLarge;
+    }
+
+    function renderBreadCounters() {
+      const remaining = Math.max(0, botState.breadMax - botState.breadUsed);
+      const text = `${botState.breadUsed}/${botState.breadMax} • ${remaining} sisa`;
+      const elA = document.getElementById('bread-counter-a');
+      const elB = document.getElementById('bread-counter-b');
+      if (elA) elA.textContent = text;
+      if (elB) elB.textContent = text;
+    }
+
+    function adjustBread(delta) {
+      botState.breadUsed = Math.min(botState.breadMax, Math.max(0, botState.breadUsed + delta));
+      renderBreadCounters();
+      showToast(`Kuota roti diperbarui: ${botState.breadUsed}/${botState.breadMax}`, 'amber');
+    }
+
+    function setBreadMax() {
+      botState.breadUsed = botState.breadMax;
+      renderBreadCounters();
+      showToast(`Kuota roti disetel ke Maksimal (${botState.breadMax}/${botState.breadMax})`, 'amber');
+    }
+
+    function updateEnergyThreshold(val) {
+      const num = Number(val);
+      const readout = document.getElementById('slider-energy-readout');
+      const badgeA = document.getElementById('work-threshold-badge-a');
+      if (readout) readout.textContent = `${num} EN`;
+      if (badgeA) badgeA.textContent = `>= ${num} EN`;
+    }
+
+    function triggerManualWork() {
+      showToast('Kerja Sekarang dieksekusi!', 'sky');
+    }
+
+    function toggleBotPause() {
+      botState.isPaused = !botState.isPaused;
+      const dotA = document.getElementById('header-status-dot-a');
+      const dotB = document.getElementById('header-status-dot-b');
+      const pillDot = document.getElementById('pill-status-dot');
+      const workPillA = document.getElementById('work-status-pill-a');
+      const workPillB = document.getElementById('work-status-pill-b');
+      const btnA = document.getElementById('pause-toggle-btn-a');
+      const btnB = document.getElementById('pause-toggle-btn-b');
+
+      if (botState.isPaused) {
+        // Paused State
+        [dotA, dotB, pillDot].forEach(d => { if (d) { d.className = 'w-2.5 h-2.5 rounded-full status-dot-paused'; } });
+        if (workPillA) { workPillA.textContent = 'Auto Kerja: DIJEDA'; workPillA.className = 'px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[12px] font-semibold'; }
+        if (workPillB) { workPillB.textContent = 'Auto Kerja: DIJEDA'; workPillB.className = 'px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[12px] font-semibold w-fit'; }
+        if (btnA) { btnA.innerHTML = '<span>▶ Lanjutkan</span>'; btnA.className = 'btn-cyber py-2 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 font-semibold text-[12px] flex items-center justify-center'; }
+        if (btnB) { btnB.innerHTML = '<span>▶ Lanjutkan</span>'; btnB.className = 'btn-cyber py-2 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 font-semibold text-[12px] flex items-center justify-center'; }
+        showToast('Auto Worker DIJEDA', 'rose');
+      } else {
+        // Running State
+        [dotA, dotB, pillDot].forEach(d => { if (d) { d.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 status-dot-active'; } });
+        if (workPillA) { workPillA.textContent = 'Auto Kerja: AKTIF'; workPillA.className = 'px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold'; }
+        if (workPillB) { workPillB.textContent = 'Auto Kerja: AKTIF'; workPillB.className = 'px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold w-fit'; }
+        if (btnA) { btnA.innerHTML = '<span>Jeda Bot</span>'; btnA.className = 'btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center'; }
+        if (btnB) { btnB.innerHTML = '<span>Jeda Bot</span>'; btnB.className = 'btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center'; }
+        showToast('Auto Worker AKTIF', 'emerald');
+      }
+    }
+
+    function toggleStatsTraining() {
+      botState.statsTrainingActive = !botState.statsTrainingActive;
+      const badgeA = document.getElementById('stats-toggle-badge-a');
+      const badgeB = document.getElementById('stats-toggle-badge-b');
+      const masterSwitch = document.getElementById('settings-stats-master-switch');
+      const masterStatePill = document.getElementById('settings-master-state-pill');
+
+      const cardA = document.getElementById('stats-card-container-a');
+      const bodyA = document.getElementById('stats-accordion-body-a');
+      const countA = document.getElementById('panel-a-active-stat-count');
+
+      const cardB = document.getElementById('stats-card-container-b');
+      const bodyB = document.getElementById('stats-accordion-body-b');
+      const countB = document.getElementById('panel-b-active-stat-count');
+
+      const settingsStatsWrapper = document.getElementById('settings-stats-wrapper');
+
+      if (botState.statsTrainingActive) {
+        const activeHtml = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>AKTIF</span>';
+        const activeBtnClass = 'btn-cyber px-3 py-1 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1 shadow-sm';
+        
+        if (badgeA) { badgeA.innerHTML = activeHtml; badgeA.className = activeBtnClass; }
+        if (badgeB) { badgeB.innerHTML = activeHtml; badgeB.className = activeBtnClass; }
+        
+        if (masterSwitch) {
+          masterSwitch.className = 'w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0';
+          masterSwitch.innerHTML = '<span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>';
+        }
+        if (masterStatePill) {
+          masterStatePill.textContent = 'AKTIF';
+          masterStatePill.className = 'px-2 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[11px] font-mono font-bold';
+        }
+
+        [cardA, cardB].forEach(c => { if (c) { c.classList.remove('collapsed'); c.classList.add('expanded', 'p-3'); } });
+        [bodyA, bodyB].forEach(b => { if (b) { b.classList.remove('collapsed'); b.classList.add('expanded'); } });
+        [countA, countB].forEach(cnt => { if (cnt) cnt.classList.remove('hidden'); });
+
+        if (settingsStatsWrapper) settingsStatsWrapper.classList.remove('hidden');
+        showToast('Auto Latihan Stats AKTIF', 'emerald');
+      } else {
+        // Neutral Grey OFF Badge (Single Dot)
+        const offHtml = '<span class="w-1.5 h-1.5 rounded-full bg-[#64748b]"></span><span>• OFF</span>';
+        const offBtnClass = 'btn-cyber px-3 py-1 rounded-full badge-train-off text-[12px] font-bold tracking-wide flex items-center gap-1 shadow-sm';
+
+        if (badgeA) { badgeA.innerHTML = offHtml; badgeA.className = offBtnClass; }
+        if (badgeB) { badgeB.innerHTML = offHtml; badgeB.className = offBtnClass; }
+
+        if (masterSwitch) {
+          masterSwitch.className = 'w-11 h-6 rounded-full bg-[#1e293b] border border-[#334155] p-0.5 flex items-center justify-start transition-all shrink-0';
+          masterSwitch.innerHTML = '<span class="w-4 h-4 rounded-full bg-slate-400 shadow"></span>';
+        }
+        if (masterStatePill) {
+          masterStatePill.textContent = 'OFF';
+          masterStatePill.className = 'px-2 py-0.5 rounded-full bg-slate-800 border border-white/15 text-slate-400 text-[11px] font-mono font-bold';
+        }
+
+        [cardA, cardB].forEach(c => { if (c) { c.classList.remove('expanded'); c.classList.add('collapsed'); } });
+        [bodyA, bodyB].forEach(b => { if (b) { b.classList.remove('expanded'); b.classList.add('collapsed'); } });
+        [countA, countB].forEach(cnt => { if (cnt) cnt.classList.add('hidden'); });
+
+        if (settingsStatsWrapper) settingsStatsWrapper.classList.add('hidden');
+        showToast('Auto Latihan Stats OFF', 'info');
+      }
+    }
+
+    function toggleStatCard(statKey) {
+      botState.statEnabled[statKey] = !botState.statEnabled[statKey];
+      renderStatCardsAndPriority();
+      calculateGoldCosts();
+      showToast(`${statMeta[statKey].name} diperbarui`, 'emerald');
+    }
+
+    function renderStatCardsAndPriority() {
+      const keys = ['str', 'edu', 'eko'];
+      const activeKeys = keys.filter(k => botState.statEnabled[k]);
+      const activeCount = activeKeys.length;
+
+      keys.forEach(k => {
+        const isChecked = botState.statEnabled[k];
+        const card = document.getElementById(`stat-card-${k}`);
+        const checkBox = document.getElementById(`checkbox-box-${k}`);
+        const inputEl = document.getElementById(`target-${k}`);
+        const footerActive = document.getElementById(`footer-active-${k}`);
+        const footerDimmed = document.getElementById(`footer-dimmed-${k}`);
+        const miniPillA = document.getElementById(`mini-pill-${k}-a`);
+        const miniPillB = document.getElementById(`mini-pill-${k}-b`);
+
+        if (card) card.className = `stat-card ${isChecked ? 'active' : 'dimmed'} theme-${k} p-4 flex flex-col gap-3`;
+        if (checkBox) checkBox.className = isChecked ? `stat-checkbox-box bg-${k==='str'?'rose-500':k==='edu'?'sky-400':'emerald-400'} border text-slate-950` : 'stat-checkbox-box bg-slate-900 border border-white/25 text-slate-950';
+        if (inputEl) inputEl.disabled = !isChecked;
+
+        if (footerActive && footerDimmed) {
+          if (isChecked) {
+            footerActive.classList.remove('hidden'); footerActive.classList.add('flex');
+            footerDimmed.classList.add('hidden'); footerDimmed.classList.remove('flex');
+          } else {
+            footerActive.classList.add('hidden'); footerActive.classList.remove('flex');
+            footerDimmed.classList.remove('hidden'); footerDimmed.classList.add('flex');
+          }
+        }
+        [miniPillA, miniPillB].forEach(pill => {
+          if (pill) {
+            if (isChecked) pill.classList.remove('dimmed');
+            else pill.classList.add('dimmed');
+          }
+        });
+      });
+
+      const singlePill = document.getElementById('priority-single-pill');
+      const multiDropdown = document.getElementById('priority-multi-dropdown');
+      const prioritySelect = document.getElementById('priority-select');
+
+      if (activeCount === 1) {
+        if (singlePill) { singlePill.classList.remove('hidden'); singlePill.classList.add('flex'); }
+        if (multiDropdown) { multiDropdown.classList.add('hidden'); multiDropdown.classList.remove('flex'); }
+      } else if (activeCount >= 2) {
+        if (singlePill) { singlePill.classList.add('hidden'); singlePill.classList.remove('flex'); }
+        if (multiDropdown) { multiDropdown.classList.remove('hidden'); multiDropdown.classList.add('flex'); }
+
+        if (prioritySelect) {
+          let optionsHtml = '<option value="Seimbang (Rotasi Otomatis)">Seimbang (Rotasi Otomatis)</option>';
+          if (botState.statEnabled.str) optionsHtml += '<option value="Kekuatan Dulu (STR)">Kekuatan Dulu (STR)</option>';
+          if (botState.statEnabled.edu) optionsHtml += '<option value="Pendidikan Dulu (EDU)">Pendidikan Dulu (EDU)</option>';
+          if (botState.statEnabled.eko) optionsHtml += '<option value="Ekonomi Dulu (EKO)">Ekonomi Dulu (EKO)</option>';
+          prioritySelect.innerHTML = optionsHtml;
+        }
+      }
+
+      const countBadgeA = document.getElementById('panel-a-active-stat-count');
+      const countBadgeB = document.getElementById('panel-b-active-stat-count');
+      if (countBadgeA) countBadgeA.textContent = `${activeCount}/3 Aktif`;
+      if (countBadgeB) countBadgeB.textContent = `${activeCount}/3 Aktif`;
+    }
+
+    function computeSeriesCost(currentLv, targetLv) {
+      if (targetLv <= currentLv) return 0;
+      let total = 0;
+      for (let lv = currentLv + 1; lv <= targetLv; lv++) total += lv;
+      return total;
+    }
+
+    function formatIDRNumber(num) {
+      return Math.round(num).toString().replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+    }
+
+    function calculateGoldCosts() {
+      const keys = ['str', 'edu', 'eko'];
+      let totalNeeded = 0;
+      let activeCount = 0;
+
+      keys.forEach(k => {
+        const isChecked = botState.statEnabled[k];
+        const currentLv = botState.currentStats[k];
+        const inputEl = document.getElementById(`target-${k}`);
+        const targetLv = inputEl ? (parseInt(inputEl.value, 10) || currentLv) : currentLv;
+        const rawCost = computeSeriesCost(currentLv, targetLv);
+        const effectiveCost = isChecked ? rawCost : 0;
+
+        const costDisplay = document.getElementById(`cost-${k}-display`);
+        const breakdownVal = document.getElementById(`breakdown-val-${k}`);
+
+        if (costDisplay) costDisplay.textContent = `${formatIDRNumber(rawCost)} Emas`;
+
+        if (isChecked) {
+          activeCount++;
+          totalNeeded += effectiveCost;
+          if (breakdownVal) {
+            breakdownVal.textContent = `${formatIDRNumber(effectiveCost)} Emas`;
+            breakdownVal.className = 'font-mono font-semibold text-white tabular-nums';
+          }
+        } else {
+          if (breakdownVal) {
+            breakdownVal.textContent = '[ Dilewati ]';
+            breakdownVal.className = 'font-mono text-slate-400 tabular-nums';
+          }
+        }
+      });
+
+      const walletGold = parseInt(document.getElementById('wallet-gold-input')?.value, 10) || 0;
+      const reserveGold = parseInt(document.getElementById('reserve-gold-input')?.value, 10) || 0;
+      const usableGold = Math.max(0, walletGold - reserveGold);
+
+      const totalLabel = document.getElementById('total-gold-label');
+      const totalNeededEl = document.getElementById('total-gold-needed');
+      const statusBadge = document.getElementById('finance-status-badge');
+
+      if (totalLabel) totalLabel.textContent = `Total Emas Dibutuhkan (${activeCount} Stat)`;
+      if (totalNeededEl) totalNeededEl.textContent = `${formatIDRNumber(totalNeeded)} Emas`;
+
+      if (statusBadge) {
+        if (usableGold >= totalNeeded) {
+          statusBadge.textContent = `AMAN • Sisa +${formatIDRNumber(usableGold - totalNeeded)} Emas`;
+          statusBadge.className = 'w-fit px-3 py-1 rounded-lg bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tabular-nums whitespace-nowrap';
+        } else {
+          statusBadge.textContent = `KURANG ${formatIDRNumber(totalNeeded - usableGold)} EMAS`;
+          statusBadge.className = 'w-fit px-3 py-1 rounded-lg bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[12px] font-bold tabular-nums whitespace-nowrap';
+        }
+      }
+    }
+
+    function switchSettingsTab(tabIndex) {
+      for (let i = 1; i <= 5; i++) {
+        const btn = document.getElementById(`tab-btn-${i}`);
+        const panel = document.getElementById(`settings-tab-${i}`);
+        const isTarget = i === tabIndex;
+        if (btn) btn.className = isTarget ? 'btn-cyber py-2 px-2 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 flex items-center justify-center gap-1.5 text-center text-[12px] font-semibold' : 'btn-cyber py-2 px-2 rounded-xl bg-transparent text-slate-400 flex items-center justify-center gap-1.5 text-center text-[12px]';
+        if (panel) {
+          if (isTarget) { panel.classList.remove('hidden'); panel.classList.add('flex'); }
+          else { panel.classList.add('hidden'); panel.classList.remove('flex'); }
+        }
+      }
+    }
+
+    function togglePanelMode() {
+      botState.isPillMode = !botState.isPillMode;
+      const fullContainer = document.getElementById('aw-full-container');
+      const pillContainer = document.getElementById('aw-pill-container');
+      if (botState.isPillMode) {
+        if (fullContainer) fullContainer.classList.add('hidden');
+        if (pillContainer) pillContainer.classList.remove('hidden');
+        showToast('Beralih ke Mode Kapsul Ramping', 'sky');
+      } else {
+        if (fullContainer) fullContainer.classList.remove('hidden');
+        if (pillContainer) pillContainer.classList.add('hidden');
+        showToast('Beralih ke Mode Panel Penuh', 'sky');
+      }
+    }
+
+    function focusSurfaceC() {
+      document.getElementById('section-surface-c')?.scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function setShowcaseView(view) {
+      const secA = document.getElementById('section-surface-a');
+      const secB = document.getElementById('section-surface-b');
+      const secC = document.getElementById('section-surface-c');
+      if (!secA || !secB || !secC) return;
+      secA.classList.remove('hidden'); secB.classList.remove('hidden'); secC.classList.remove('hidden');
+      if (view === 'surface-c') { secA.classList.add('hidden'); secB.classList.add('hidden'); switchSettingsTab(2); }
+    }
+
+    window.onload = function () {
+      renderStatCardsAndPriority();
+      calculateGoldCosts();
+      renderBreadCounters();
+      updateClocksAndTimers();
+      setInterval(updateClocksAndTimers, 1000);
+    };
+  </script>
+</body>
+</html>

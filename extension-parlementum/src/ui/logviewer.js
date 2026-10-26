@@ -95,20 +95,39 @@ function ensureLogViewerStyles() {
             color: #00d4ff;
             border: 1px solid rgba(0, 212, 255, 0.25);
         }
+        .aw-log-badge-training {
+            background: rgba(129, 140, 248, 0.15);
+            color: #a5b4fc;
+            border: 1px solid rgba(129, 140, 248, 0.3);
+        }
+        .aw-log-badge-food {
+            background: rgba(249, 115, 22, 0.15);
+            color: #fdba74;
+            border: 1px solid rgba(249, 115, 22, 0.3);
+        }
+        .aw-log-badge-work {
+            background: rgba(6, 182, 212, 0.15);
+            color: #67e8f9;
+            border: 1px solid rgba(6, 182, 212, 0.3);
+        }
 
         /* Log Row */
         .aw-log-row {
             display: flex;
             align-items: flex-start;
             gap: 10px;
-            padding: 8px 10px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+            padding: 7px 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-left: 3px solid #38bdf8;
+            background: rgba(18, 24, 38, 0.65);
             border-radius: 6px;
-            transition: background 0.15s;
+            margin-bottom: 4px;
+            transition: background 0.15s, border-color 0.15s;
             position: relative;
         }
         .aw-log-row:hover {
-            background: rgba(255, 255, 255, 0.04);
+            background: rgba(30, 41, 59, 0.85);
+            border-color: rgba(255, 255, 255, 0.1);
         }
         .aw-log-row:last-child {
             border-bottom: none;
@@ -499,6 +518,22 @@ function renderLogs(state, filterType, filterText) {
         const row = document.createElement('div');
         row.className = 'aw-log-row';
 
+        // Badge & Context Detection
+        let bConf = BADGE_CONFIG[entry.type] || BADGE_CONFIG.info;
+        const msgLower = (entry.message || '').toLowerCase();
+        if (entry.type === 'info') {
+            if (/\[auto latihan\]|latihan|target str|target edu|target eko|kekuatan|pendidikan|ekonomi/i.test(msgLower)) {
+                bConf = { text: 'LATIHAN', cls: 'aw-log-badge-training', dot: '#818cf8' };
+            } else if (/roti|makanan|kuota roti|slot makanan|makan/i.test(msgLower)) {
+                bConf = { text: 'ROTI', cls: 'aw-log-badge-food', dot: '#f97316' };
+            } else if (/shift|kerja|worker/i.test(msgLower)) {
+                bConf = { text: 'KERJA', cls: 'aw-log-badge-work', dot: '#06b6d4' };
+            } else if (/reset server|utc|hari berganti|token|auth/i.test(msgLower)) {
+                bConf = { text: 'SISTEM', cls: 'aw-log-badge-info', dot: '#38bdf8' };
+            }
+        }
+        row.style.borderLeft = `3px solid ${bConf.dot}`;
+
         // Timestamp
         const time = document.createElement('span');
         time.className = 'aw-log-time';
@@ -506,14 +541,13 @@ function renderLogs(state, filterType, filterText) {
 
         // Badge
         const badge = document.createElement('span');
-        const bConf = BADGE_CONFIG[entry.type] || BADGE_CONFIG.info;
         badge.className = `aw-log-badge ${bConf.cls}`;
         badge.innerHTML = `<span style="width:5px;height:5px;border-radius:50%;background:${bConf.dot};display:inline-block;margin-right:4px;"></span>${bConf.text}`;
 
         // Message
         const msg = document.createElement('span');
         msg.className = 'aw-log-msg';
-        msg.textContent = entry.message;
+        msg.textContent = (entry.message || '').replace(/^\[\d{2}[.:]\d{2}[.:]\d{2}\]\s*/, '');
 
         // Individual copy button on hover
         const copyBtn = document.createElement('button');

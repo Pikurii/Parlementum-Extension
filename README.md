@@ -1,143 +1,207 @@
 # Parlementum Auto Worker
 
-[![Version](https://img.shields.io/badge/version-5.11.0-blue.svg)](https://github.com/Pikurii/Parlementum-Extension)
-[![Manifest](https://img.shields.io/badge/manifest-v3-purple.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Browsers](https://img.shields.io/badge/browsers-Chrome%20%7C%20Opera%20GX%20%7C%20Brave%20%7C%20Edge-orange.svg)](https://github.com/Pikurii/Parlementum-Extension)
-[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+<div align="center">
 
-A Manifest V3 browser extension built for the geopolitical browser game [Parlementum.org](https://parlamentum.org). It tracks your energy recovery, factors in regional buffs, and automatically performs work shifts when you hit your configured threshold.
+[![Version](https://img.shields.io/badge/version-5.12.2-blue.svg?style=for-the-badge)](https://github.com/Pikurii/Parlementum-Extension)
+[![Manifest](https://img.shields.io/badge/manifest-v3-purple.svg?style=for-the-badge)](https://developer.chrome.com/docs/extensions/mv3/intro/)
+[![Tests](https://img.shields.io/badge/tests-17%20passed-success.svg?style=for-the-badge)](tests/)
+[![Browsers](https://img.shields.io/badge/browsers-Chrome%20%7C%20Opera%20GX%20%7C%20Brave%20%7C%20Edge-orange.svg?style=for-the-badge)](https://github.com/Pikurii/Parlementum-Extension)
+[![License](https://img.shields.io/badge/license-MIT-green.svg?style=for-the-badge)](LICENSE)
 
-I built this so you do not have to keep refreshing or babysitting the game dashboard all day. It runs quietly in the background, keeps CPU and memory footprints minimal, and syncs directly with the game state.
+**Next-Gen Autonomous Worker, Multi-Stat Trainer & Energy Automation Suite for [Parlementum.org](https://parlamentum.org).**
+
+*Designed for high efficiency, seamless background execution, zero-cost tab idling, and natural human-like behavioral stealth.*
+
+</div>
 
 ---
 
-## Installation
+## 📖 Overview
+
+**Parlamentum Auto Worker** is an ultra-lightweight, high-performance browser extension (Manifest V3) engineered specifically for the geopolitical strategy game [Parlementum.org](https://parlamentum.org).
+
+It eliminates repetitive dashboard babysitting by tracking ground-truth energy recovery, computing complex regional infrastructure buffs, autonomously performing production shifts, training your character stats (Strength, Education, Economy), and maintaining daily bread quotas—all while operating in the background with near-zero CPU and memory overhead.
+
+---
+
+## ⚡ Key Features
+
+### 1. ⚙️ Intelligent Energy & Work Automation
+- **Ground-Truth Network Interception**: Hooks into `/api/player/work` responses within the main-world context to capture authoritative server numbers for energy, XP, and production outputs.
+- **Fail-Safe DOM Execution**: When direct API calls cannot be dispatched, falls back gracefully to synthetic human clicks on the verified `data-testid="work"` button.
+- **Dynamic Energy Threshold Jitter**: Applies subtle Gaussian random variations ($\pm 3$ EN) to work execution thresholds to avoid rigid, detectable patterns.
+- **Daily Golden Hour Flush (Jam Emas 00:00 UTC)**: Dynamically lowers energy thresholds in the 45 minutes preceding daily server rollover to ensure every bit of energy is converted into XP and production before reset.
+- **Accurate Region Regen Modeling**: Reads real-time regional infrastructure, Crown Index health bonuses (e.g. West Java $+50\%$ regen), and displays exact countdowns to target shifts and full capacity.
+
+### 2. 🏋️ Autonomous 3-Stat Training Suite
+- **100% In-Game Progress Synchronization**: Directly reads the rendered progress bar percentage (`style="width: X%"`) from the game's active training card (`dash-training`), ensuring an exact 1:1 match between the extension and the game dashboard.
+- **Configurable Stat Targets**: Independently set level caps for **Strength (STR)**, **Education (EDU)**, and **Economy (EKO)**.
+- **Smart Rotation & Priorities**: Choose between focused progression (`Pendidikan`, `Ekonomi`, `Kekuatan`) or `Seimbang` (trains the lowest stat first).
+- **Gold Safety Guard**: Built-in arithmetic progression calculator computes total gold costs for multi-level training runs and protects your reserve (`Min Gold Reserve`).
+
+### 3. 🥖 Auto-Synced Food & Bread Quota
+- **100% Automatic Synchronization**: Automatically detects standard ($10$ slots) or premium ($20$ slots) daily quota directly from server responses and DOM state.
+- **Clean & Spacious Design**: Eliminates cluttered manual `[-]`, `[+]`, and `[Max]` buttons in favor of an elegant, real-time status badge (`17/20 Slot • 3 sisa`).
+- **Reset Reminders**: Emits visual alerts when unconsumed food slots remain close to the 00:00 UTC daily reset.
+
+### 4. 🛡️ Advanced Stealth & Humanized Behavior
+- **Organic Micro-Breaks**: Periodically triggers randomized rest intervals (default every 4 hours for 8–15 minutes) mimicking realistic human pauses away from the keyboard.
+- **Human Click Physics**: Simulates organic cursor placement within button bounds using bounded Gaussian jitter rather than robotic, dead-center clicks.
+- **Adaptive Exponential Backoff**: Automatically handles server maintenance, Cloudflare challenges, and HTTP 502/503/504 errors by scaling retry intervals progressively (from 45s up to 8 minutes) with human-like jitter.
+- **Circuit Breaker Protection**: Detects verification prompts, captchas, and authentication expiration, halting operations safely to protect your account.
+
+### 5. 🍃 Eco-Mode & Zero-Cost Background Tabs
+- **GPU & Animation Suspension (`.aw-tab-hidden`)**: Listens to tab visibility events (`visibilitychange`). When the tab is in the background or minimized, CSS gradient shimmers and pulse animations are frozen, reducing compositor GPU/CPU load to near-zero.
+- **Passive Math Projection**: Energy recovery during background execution relies on timestamp delta mathematics rather than expensive continuous DOM polling.
+- **Multi-Tab Mutex Coordination**: Employs `BroadcastChannel` with atomic leader locks so that opening multiple Parlamentum tabs will never trigger double work shifts or race conditions.
+
+### 6. 🧪 Automated Unit Test Suite
+- **17 Native Unit Tests**: Powered by Node.js native test runner (`node --test tests/**/*.test.js`) with zero external runtime dependencies.
+- **Validated Formulas**: Verifies arithmetic gold progression, official exponential training durations, bounded Gaussian distributions, exponential backoff scales, and DOM progress priority.
+
+---
+
+## 🖥️ User Interface Surfaces
+
+| Surface | Description |
+| :--- | :--- |
+| **Surface A: Floating HUD (356px)** | Draggable, pinnable in-game widget featuring live energy shimmer bars, UTC reset timers, quick stat pills, and immediate action buttons (`[Kerja]`, `[Jeda Bot]`, `[Log Bot]`). |
+| **Surface B: Toolbar Popup (380px)** | Standalone browser action window providing full dashboard metrics, token health, and live countdowns across all tabs without navigating to the game. |
+| **Surface C: Desktop Settings Modal (620px)** | Spacious 5-tab configuration center (`Kerja`, `Stats & Emas`, `Stealth & Humanizer`, `Suara & Notifikasi`, `Pintasan Keyboard`) with instant auto-save. |
+| **Activity Logger** | Searchable in-game log viewer with category filters (`Semua`, `Sukses`, `Peringatan`, `Error`, `Info`), contextual micro-tags, and copy-to-clipboard functionality. |
+
+---
+
+## ⌨️ Keyboard Shortcuts
+
+When on the Parlamentum dashboard, the following default shortcuts are available (customizable in Settings):
+
+| Shortcut | Action | Description |
+| :--- | :--- | :--- |
+| `Ctrl + Shift + A` | **Toggle Floating Panel** | Show or hide the in-game HUD |
+| `Alt + Shift + W` | **Work Now** | Trigger an immediate manual shift |
+| `Alt + Shift + P` | **Pause / Resume** | Toggle the autonomous worker state |
+| `Ctrl + Shift + L` | **Activity Log** | Open the searchable activity log viewer |
+| `Ctrl + Shift + S` | **Settings Modal** | Open the 620px configuration dialog |
+
+---
+
+## 📦 Installation Guide
 
 ### Option A: Using the Pre-Built ZIP (Recommended)
 
-1. Download [`parlementum-auto-worker-v5.11.0.zip`](https://github.com/Pikurii/Parlementum-Extension/raw/main/parlementum-auto-worker-v5.11.0.zip).
-2. Extract the archive into a folder on your computer.
-3. Open your browser extensions page:
-   - **Opera GX / Opera**: `opera://extensions`
+1. Download [`parlementum-auto-worker-v5.12.2.zip`](https://github.com/Pikurii/Parlementum-Extension/raw/main/parlementum-auto-worker-v5.12.2.zip).
+2. Extract the archive into a dedicated folder on your computer.
+3. Open your browser extension management page:
    - **Google Chrome**: `chrome://extensions`
+   - **Opera GX / Opera**: `opera://extensions`
    - **Brave**: `brave://extensions`
    - **Microsoft Edge**: `edge://extensions`
-4. Turn on **Developer mode** (toggle in the top-right corner).
-5. Click **Load unpacked** (top-left) and select the extracted folder (the one containing `manifest.json`).
-6. Navigate to [parlamentum.org/dashboard](https://parlamentum.org/dashboard). The floating worker panel will appear on the page.
+4. Enable **Developer mode** (toggle in the top-right corner).
+5. Click **Load unpacked** (top-left) and select the extracted folder (the directory containing `manifest.json`).
+6. Navigate to [parlamentum.org/dashboard](https://parlamentum.org/dashboard). The floating HUD will appear automatically.
 
-### Option B: From the Repository
+### Option B: From Cloned Source
 
-If you cloned this repository, you can directly load the `extension-parlementum-release` directory via **Load unpacked**.
-
----
-
-## What It Does
-
-- **Threshold-Based Work**: Automatically triggers work shifts when your energy reaches your configured target (default is 100 EN).
-- **Network Interception & DOM Fallback**: Listens directly to `/api/player/work` responses in the main world context to get ground-truth energy and production numbers. If API requests cannot be dispatched directly, it falls back to native DOM clicks on the verified `data-testid="work"` button.
-- **Accurate Region Regen Calculations**: Reads local region infrastructure data and Crown Index multipliers (such as West Java's +50% health regen) to calculate your true energy recovery rate and exact countdowns.
-- **Energy Flush 00:00 UTC (Jam Emas)**: Automatically works at lower thresholds 45 minutes before 00:00 UTC reset to ensure no energy is wasted before the server rollover.
-- **Dynamic Timing Jitter**: Adds slight, randomized variations (5-25 seconds) to work execution intervals to avoid robotic, fixed-interval patterns.
-- **Circuit Breaker Safety**: Automatically detects Cloudflare challenges, Turnstile/verifications, 502/503/504 server maintenance, and interactive Captchas, pausing the worker safely.
-- **Hygienic Auto-Reload**: Refreshes the game tab cleanly after 12+ hours uptime when energy is low, preventing long-term browser memory leaks.
-- **Daily Food Slot Tracker**: Monitors the daily 10-slot bread quota, captures game toasts ("Batas roti harian tercapai"), and offers quick +/- and full-set controls on the widget and popup.
-- **Low Resource Usage (Eco Mode)**: When the game tab is in the background, expensive DOM polling and animations are paused. Energy recovery relies on timestamp delta math rather than active polling loops.
-- **Sleep Schedule**: Lets you define rest windows (e.g. 01:00 - 06:00) during which the worker stays paused.
-- **Floating HUD & Toolbar Popup**: Check remaining energy, shift timers, and recent production from either the draggable in-game widget or the browser action popup.
-- **Activity Log**: Built-in searchable log with filters (Success, Info, Warning, Error) to audit past shifts, XP gained, and items produced.
-- **Session Auto-Refresh**: If a session token expires with a 401 response, the extension reloads the tab to pick up refreshed session cookies.
-
-For development tasks, pending items, and upcoming features, see [ROADMAP.md](ROADMAP.md).
+If you clone this repository directly, load the pre-built `extension-parlementum-release/` directory directly into your browser via **Load unpacked**.
 
 ---
 
-## Keyboard Shortcuts
+## 🛠️ Local Development & Testing
 
-When on the Parlamentum dashboard, the following shortcuts are available:
+### Prerequisites
+- [Node.js](https://nodejs.org) (v18 or higher recommended)
+- `npm`
 
-- `Ctrl + Shift + A` - Toggle the floating panel open or closed
-- `Alt + Shift + W` - Trigger an immediate work shift manually
-- `Alt + Shift + P` - Pause or resume the worker
-- `Ctrl + Shift + L` - Open the Activity Log modal
-- `Ctrl + Shift + S` - Open Settings
+### Setup & Commands
+```bash
+# Clone the repository
+git clone https://github.com/Pikurii/Parlementum-Extension.git
+cd Parlementum-Extension/extension-parlementum
 
----
+# Install development dependencies
+npm install
 
-## Updating
+# Run the automated test suite (17 unit tests)
+npm test
 
-When a new version is released:
+# Build for development with live watch mode
+npm run dev
 
-1. Download the latest `.zip` archive or pull the latest repository changes.
-2. Replace your existing extension folder with the new files.
-3. Go to `opera://extensions` (or `chrome://extensions`).
-4. Click the **Reload** button on the Parlamentum Auto Worker card, then refresh your game tab.
+# Compile production bundle and sync release folder
+npm run release
 
----
-
-## Repository Structure
-
-```text
-Parlementum-Extension/
-|-- extension-parlementum/              # Source files (ES modules)
-|   |-- src/
-|   |   |-- main.js                    # Core coordinator & worker loop
-|   |   |-- work.js                    # Shift execution & DOM triggers
-|   |   |-- energy.js                  # Regen formulas & region scrapers
-|   |   |-- interceptor-client.js      # Isolated-world receiver
-|   |   |-- ui/                        # Floating panel & log viewer
-|   |-- interceptor.js                 # Main-world fetch/XHR hook
-|   |-- background.js                  # Service worker
-|   |-- package.json                   # Build tools (Vite)
-|   +-- vite.config.js                 # Bundler config
-|
-|-- extension-parlementum-release/      # Compiled, ready-to-load extension
-|-- parlementum-auto-worker-v5.11.0.zip # Standalone distributable archive
-|-- ROADMAP.md
-+-- README.md
+# Generate a distributable release ZIP archive
+npm run zip
 ```
 
 ---
 
-## Local Development
+## 📁 Repository Structure
 
-If you want to modify the source code or contribute:
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/Pikurii/Parlementum-Extension.git
-   cd Parlementum-Extension/extension-parlementum
-   ```
-2. Install dependencies:
-   ```bash
-   npm install
-   ```
-3. Make changes inside `extension-parlementum/src/`.
-4. Build the release:
-   ```bash
-   npm run release
-   ```
-   This runs Vite to bundle `src/` into `dist/content.js`, copies all required assets into `extension-parlementum-release/`, and regenerates the distribution zip.
+```text
+Parlementum-Extension/
+├── extension-parlementum/              # Core source codebase (ES Modules)
+│   ├── src/
+│   │   ├── main.js                    # Primary orchestrator & worker loop
+│   │   ├── work.js                    # Shift execution & DOM triggers
+│   │   ├── energy.js                  # Energy math, regen modeling & bread quota
+│   │   ├── training.js                # Autonomous STR/EDU/EKO training & gold formulas
+│   │   ├── humanizer.js               # Micro-breaks, Gaussian jitter & organic clicks
+│   │   ├── broadcast.js               # Multi-tab BroadcastChannel & leader mutex
+│   │   ├── interceptor-client.js      # Main-world to isolated-world event bridge
+│   │   ├── config.js                  # Configuration schema & validation bounds
+│   │   ├── state.js                   # Reactive state store & local storage sync
+│   │   ├── logger.js                  # Ring-buffer activity logging engine
+│   │   ├── notifications.js           # Audio alerts & desktop notifications
+│   │   ├── token.js                   # JWT session decoding & expiry monitor
+│   │   └── ui/
+│   │       ├── panel.js               # Surface A (In-Game Floating HUD)
+│   │       ├── settings.js            # Surface C (620px Desktop Settings Modal)
+│   │       ├── logviewer.js           # Searchable Activity Log Modal
+│   │       └── icons.js               # 100% Vector SVG icon library (Zero Emoji)
+│   ├── popup/                         # Surface B (Browser Toolbar Popup)
+│   │   ├── popup.html
+│   │   └── popup.js
+│   ├── tests/                         # Automated unit test suite
+│   │   ├── config.test.js
+│   │   ├── energy.test.js
+│   │   ├── humanizer.test.js
+│   │   └── training.test.js
+│   ├── interceptor.js                 # Main-world fetch/XHR network hook
+│   ├── background.js                  # Manifest V3 service worker & alarms
+│   ├── sync-release.cjs               # Release synchronization & packaging script
+│   ├── package.json                   # Project metadata & npm scripts
+│   └── vite.config.js                 # Bundler configuration
+│
+├── extension-parlementum-release/      # Standalone compiled release folder
+├── parlementum-auto-worker-v5.12.2.zip # Standalone distributable release archive
+├── ROADMAP.md                         # Detailed technical specification & changelog
+├── LICENSE                            # MIT License
+└── README.md                          # Project documentation
+```
 
 ---
 
-## Frequently Asked Questions
+## 💬 Frequently Asked Questions (FAQ)
 
-**Why is the panel not appearing?**  
-Ensure you are logged in and on `https://parlamentum.org/dashboard`. If the page was open before you loaded the extension, do a hard refresh (Ctrl + F5).
+**Q: Does the browser tab need to stay active in the foreground?**  
+**A:** No. You can minimize the window or keep the tab in the background. The extension's Eco Mode suspends expensive CSS animations, relying on timestamp delta calculations to track energy passively while consuming virtually zero resources.
 
-**Does the browser tab need to stay open?**  
-Yes, the tab needs to remain open for the content script to run. However, you can keep it in the background or minimized; Eco Mode ensures it uses minimal RAM and CPU.
+**Q: Can I use this on multiple tabs simultaneously?**  
+**A:** Yes. The extension features a built-in `BroadcastChannel` mutex lock. Only the active leader tab executes work and training shifts; all other tabs listen and reflect state changes in real-time.
 
-**How does it calculate production and XP?**  
-In Parlamentum, each 10 units of energy spent yield 4 XP, while produced goods depend on your company and regional bonuses. The extension reads the raw server response from `/api/player/work` to record exact figures.
+**Q: How does the bot avoid detection?**  
+**A:** Unlike basic bots that trigger actions at rigid, robotic intervals, Parlementum Auto Worker incorporates Gaussian threshold jitter, organic randomized micro-breaks (8–15 minutes every few hours), natural click coordinate distributions, and adaptive exponential backoff on server anomalies.
 
 ---
 
-## Disclaimer
+## ⚖️ Disclaimer
 
-This project is intended for personal automation and educational purposes. Use it responsibly and in accordance with the game platform terms. The author assumes no responsibility for any account actions resulting from the use of this tool.
+This project is developed for personal automation, quality-of-life convenience, and educational purposes. Please use it responsibly and in accordance with the game's community guidelines. The developers assume no responsibility for any unintended consequences or account actions resulting from third-party automation tools.
 
-## License
+---
 
-MIT License. See [LICENSE](LICENSE) for details.
+## 📜 License
+
+Distributed under the [MIT License](LICENSE). Free for personal use, modification, and contribution.

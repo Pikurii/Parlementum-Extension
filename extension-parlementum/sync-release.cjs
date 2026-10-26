@@ -13,7 +13,11 @@ const FILES_TO_COPY = ['manifest.json', 'background.js', 'interceptor.js'];
 const DIRS_TO_COPY  = ['dist', 'icons', 'popup'];
 
 // Bersihkan dan buat ulang folder release
-if (fs.existsSync(DEST)) fs.rmSync(DEST, { recursive: true, force: true });
+try {
+    if (fs.existsSync(DEST)) fs.rmSync(DEST, { recursive: true, force: true });
+} catch (e) {
+    // Abaikan jika folder sedang dikunci oleh browser/explorer, overwrite file langsung
+}
 fs.mkdirSync(DEST, { recursive: true });
 
 // Copy files
@@ -43,26 +47,28 @@ for (const dir of DIRS_TO_COPY) {
 // Laporan
 const size = fs.statSync(path.join(DEST, 'dist', 'content.js')).size;
 console.log('');
-console.log('✅ Release folder updated!');
+console.log('[OK] Release folder updated!');
 console.log('   Folder : ' + DEST);
 console.log('   Size   : ' + (size / 1024).toFixed(1) + ' KB');
 
-// Otomatis buat file .zip untuk kemudahan distribusi
-try {
-    const { execSync } = require('child_process');
-    const manifest = JSON.parse(fs.readFileSync(path.join(DEST, 'manifest.json'), 'utf8'));
-    const zipName = `parlementum-auto-worker-v${manifest.version || '5.11.0'}.zip`;
-    const zipPath = path.join(SRC, '..', zipName);
-    if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
-    execSync(`powershell -NoProfile -Command "Compress-Archive -Path '${DEST}\\*' -DestinationPath '${zipPath}' -Force"`);
-    if (fs.existsSync(zipPath)) {
-        const zipSize = fs.statSync(zipPath).size;
-        console.log('📦 Release ZIP created : ' + zipName + ' (' + (zipSize / 1024).toFixed(1) + ' KB)');
+// Buat file .zip HANYA jika dipanggil dengan flag --zip (misal: npm run zip)
+if (process.argv.includes('--zip')) {
+    try {
+        const { execSync } = require('child_process');
+        const manifest = JSON.parse(fs.readFileSync(path.join(DEST, 'manifest.json'), 'utf8'));
+        const zipName = `parlementum-auto-worker-v${manifest.version || '5.12.0'}.zip`;
+        const zipPath = path.join(SRC, '..', zipName);
+        if (fs.existsSync(zipPath)) fs.unlinkSync(zipPath);
+        execSync(`powershell -NoProfile -Command "Compress-Archive -Path '${DEST}\\*' -DestinationPath '${zipPath}' -Force"`);
+        if (fs.existsSync(zipPath)) {
+            const zipSize = fs.statSync(zipPath).size;
+            console.log('[ZIP] Release ZIP created : ' + zipName + ' (' + (zipSize / 1024).toFixed(1) + ' KB)');
+        }
+    } catch (e) {
+        // zip creation optional fallback
     }
-} catch (e) {
-    // zip creation optional fallback
 }
 
 console.log('');
-console.log('👉 Di Opera GX: toggle extension OFF → ON, lalu refresh tab parlamentum.org');
+console.log('[INFO] Di Opera GX: toggle extension OFF -> ON, lalu refresh tab parlamentum.org');
 console.log('');

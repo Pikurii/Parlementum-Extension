@@ -50,9 +50,21 @@ export function log(state, CONFIG, message, type = 'info', toActivityLog = true)
     }
 
     console.log(`[${now}] ${prefix} ${message}`);
-    state.lastLogMessage = `[${now}] ${message}`;
-    state.lastLogTime = now;
+    if (toActivityLog || !state.lastLogMessage) {
+        state.lastLogMessage = `[${now}] ${message}`;
+        state.lastLogTime = now;
+    }
     if (!toActivityLog) return;
+
+    // Suppress technical lifecycle messages from persistent user activity log
+    if (/^Panel v[\d.]+\s+siap!/i.test(message) || /^Auto Worker v[\d.]+/i.test(message)) {
+        return;
+    }
+
+    // Deduplicate consecutive identical messages in activity log
+    if (state.logs.length > 0 && state.logs[0].message === message) {
+        return;
+    }
 
     state.logs.unshift({ time: now, type, message });
     if (state.logs.length > CONFIG.maxLogEntries) {

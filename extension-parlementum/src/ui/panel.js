@@ -6,11 +6,14 @@
  * All logic is identical — only imports replace global variable references.
  */
 
-import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, patchPageVisualEnergy, getGameEnergyFullText, isEnergyFlushActive } from '../energy.js';
+import { getLiveCountdown, getTimeToFullEnergy, getTimeToFullEnergy as ttfe, getGameEnergyFullText, isEnergyFlushActive, getEffectiveEnergyThreshold, isDashboardPage, readBreadQuotaFromDom } from '../energy.js';
 import { getTimeUntilExpiry } from '../token.js';
 import { getValue, setValue } from '../storage.js';
 import { saveState, saveLiveStatus } from '../state.js';
+import { broadcastTabMessage } from '../broadcast.js';
 import { ICONS } from './icons.js';
+import { getTrainingStatusDisplay, readTrainingStatsFromDom, readWalletGoldFromDom, getTrainingProgressPercentage } from '../training.js';
+import { showInPageNotification } from '../notifications.js';
 
 const HEADER_BTN_STYLE = `
     background: transparent; border: none; cursor: pointer; padding: 0;
@@ -19,36 +22,173 @@ const HEADER_BTN_STYLE = `
     transition: all 0.15s ease; color: #8892b0; line-height: 1; box-sizing: border-box;
 `;
 
+function _injectGoogleFonts() {
+    if (typeof document === 'undefined') return;
+    if (!document.getElementById('aw-google-fonts')) {
+        const link1 = document.createElement('link');
+        link1.rel = 'preconnect';
+        link1.href = 'https://fonts.googleapis.com';
+        document.head.appendChild(link1);
+
+        const link2 = document.createElement('link');
+        link2.rel = 'preconnect';
+        link2.href = 'https://fonts.gstatic.com';
+        link2.crossOrigin = 'anonymous';
+        document.head.appendChild(link2);
+
+        const link3 = document.createElement('link');
+        link3.id = 'aw-google-fonts';
+        link3.rel = 'stylesheet';
+        link3.href = 'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap';
+        document.head.appendChild(link3);
+    }
+}
+
 function _injectPanelStyles() {
     if (typeof document === 'undefined' || document.getElementById('aw-panel-styles')) return;
+    _injectGoogleFonts();
     const style = document.createElement('style');
     style.id = 'aw-panel-styles';
     style.textContent = `
+        :root, #aw-panel, #aw-full-container, #aw-pill-container {
+            --bg-abyss: #0a0e1a;
+            --surface-card: rgba(22, 27, 42, 0.75);
+            --surface-elevated: rgba(30, 39, 59, 0.82);
+            --surface-inner: rgba(13, 18, 30, 0.72);
+            --border-subtle: rgba(255, 255, 255, 0.08);
+            --border-highlight: rgba(56, 189, 248, 0.32);
+        }
+
+        #aw-panel {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+            color: #f1f5f9 !important;
+            letter-spacing: -0.01em;
+        }
+
+        .tabular-nums, .paw-mono {
+            font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace !important;
+            font-variant-numeric: tabular-nums !important;
+            letter-spacing: -0.02em !important;
+        }
+
+        /* Argon Cyber Glass Shell */
+        .paw-shell {
+            background: rgba(13, 18, 30, 0.88) !important;
+            backdrop-filter: blur(20px) saturate(160%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+            border: 1px solid rgba(255, 255, 255, 0.1) !important;
+            box-shadow: 
+                0 24px 48px -12px rgba(0, 0, 0, 0.75),
+                0 0 0 1px rgba(56, 189, 248, 0.06),
+                inset 0 1px 0 0 rgba(255, 255, 255, 0.12) !important;
+            border-radius: 16px !important;
+        }
+
+        #aw-pill-container {
+            border-radius: 999px !important;
+            min-width: 250px !important;
+            background: rgba(13, 18, 30, 0.94) !important;
+            backdrop-filter: blur(20px) saturate(160%) !important;
+            -webkit-backdrop-filter: blur(20px) saturate(160%) !important;
+            border: 1px solid rgba(56, 189, 248, 0.35) !important;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 0 0 14px rgba(56, 189, 248, 0.25) !important;
+        }
+
+        /* Modular Inner Glass Card */
+        .paw-card {
+            background: rgba(22, 27, 42, 0.75) !important;
+            backdrop-filter: blur(16px) !important;
+            -webkit-backdrop-filter: blur(16px) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+            border-radius: 12px !important;
+            transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease !important;
+        }
+        .paw-card:hover {
+            border-color: rgba(56, 189, 248, 0.28) !important;
+            background: rgba(26, 33, 52, 0.82) !important;
+        }
+
+        /* Recessed Well for Sub-Metrics */
+        .paw-well {
+            background: rgba(13, 18, 30, 0.72) !important;
+            border: 1px solid rgba(255, 255, 255, 0.06) !important;
+            border-radius: 8px !important;
+        }
+
+        /* Low-Profile Neutral OFF Badge */
+        .badge-train-off {
+            background: rgba(255, 255, 255, 0.03) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            color: #94a3b8 !important;
+        }
+
+        /* Pulse Animations for Status Dots */
+        @keyframes pulseRing {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        .status-dot-active {
+            animation: pulseRing 2s infinite !important;
+        }
+
+        @keyframes pulseAmber {
+            0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(245, 158, 11, 0.35); }
+            50% { opacity: 0.72; box-shadow: 0 0 4px rgba(245, 158, 11, 0.1); }
+        }
+        .badge-flush-pulse {
+            animation: pulseAmber 2.2s infinite ease-in-out !important;
+        }
+
+        @keyframes shimmerBar {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        @keyframes statGradientShimmer {
+            0% { background-position: -200% 0; }
+            100% { background-position: 200% 0; }
+        }
+        .energy-progress-fill {
+            background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 45%, #818cf8 85%, #38bdf8 100%) !important;
+            background-size: 200% 100% !important;
+            animation: shimmerBar 4s infinite linear !important;
+            box-shadow: 0 0 14px rgba(56, 189, 248, 0.45) !important;
+            border-radius: 999px !important;
+            transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .stat-progress-fill {
+            background: linear-gradient(90deg, #f43f5e 0%, #fb923c 45%, #fbbf24 85%, #f43f5e 100%) !important;
+            background-size: 200% 100% !important;
+            animation: statGradientShimmer 4s infinite linear !important;
+            box-shadow: 0 0 10px rgba(244, 63, 94, 0.45) !important;
+        }
+
         @keyframes aw-pulse-glow {
             0% {
-                box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 255, 136, 0.25);
+                box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.75), 0 0 12px rgba(0, 255, 136, 0.25);
                 border-color: rgba(0, 255, 136, 0.45);
             }
             50% {
-                box-shadow: 0 16px 44px rgba(0, 0, 0, 0.65), 0 0 20px rgba(0, 255, 136, 0.65);
+                box-shadow: 0 28px 54px -10px rgba(0, 0, 0, 0.85), 0 0 24px rgba(0, 255, 136, 0.65);
                 border-color: rgba(0, 255, 136, 0.85);
             }
             100% {
-                box-shadow: 0 16px 40px rgba(0, 0, 0, 0.55), 0 0 10px rgba(0, 255, 136, 0.25);
+                box-shadow: 0 24px 48px -12px rgba(0, 0, 0, 0.75), 0 0 12px rgba(0, 255, 136, 0.25);
                 border-color: rgba(0, 255, 136, 0.45);
             }
         }
         @keyframes aw-pill-pulse-glow {
             0% {
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 8px rgba(0, 255, 136, 0.3);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65), 0 0 8px rgba(0, 255, 136, 0.3);
                 border-color: rgba(0, 255, 136, 0.45);
             }
             50% {
-                box-shadow: 0 10px 28px rgba(0, 0, 0, 0.75), 0 0 18px rgba(0, 255, 136, 0.75);
+                box-shadow: 0 12px 30px rgba(0, 0, 0, 0.75), 0 0 18px rgba(0, 255, 136, 0.75);
                 border-color: rgba(0, 255, 136, 0.9);
             }
             100% {
-                box-shadow: 0 8px 24px rgba(0, 0, 0, 0.65), 0 0 8px rgba(0, 255, 136, 0.3);
+                box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65), 0 0 8px rgba(0, 255, 136, 0.3);
                 border-color: rgba(0, 255, 136, 0.45);
             }
         }
@@ -58,10 +198,27 @@ function _injectPanelStyles() {
         #aw-pill-container.aw-ready-glow {
             animation: aw-pill-pulse-glow 2.2s infinite ease-in-out !important;
         }
-        .aw-btn-action {
-            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+
+        .btn-cyber {
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
             outline: none !important;
             user-select: none !important;
+            cursor: pointer !important;
+            -webkit-tap-highlight-color: transparent !important;
+        }
+        .btn-cyber:hover:not(:disabled) {
+            filter: brightness(1.15) !important;
+            transform: translateY(-1.5px) !important;
+        }
+        .btn-cyber:active:not(:disabled) {
+            transform: translateY(0.5px) scale(0.985) !important;
+        }
+
+        .aw-btn-action {
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            outline: none !important;
+            user-select: none !important;
+            -webkit-tap-highlight-color: transparent !important;
         }
         .aw-btn-action:hover:not(:disabled) {
             filter: brightness(1.15) !important;
@@ -72,12 +229,15 @@ function _injectPanelStyles() {
             filter: brightness(0.92) !important;
         }
         .aw-header-btn {
-            transition: all 0.15s ease !important;
-            border-radius: 6px !important;
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+            border-radius: 8px !important;
+            outline: none !important;
+            -webkit-tap-highlight-color: transparent !important;
         }
         .aw-header-btn:hover {
-            background: rgba(255, 255, 255, 0.1) !important;
+            background: rgba(255, 255, 255, 0.12) !important;
             color: #fff !important;
+            border-color: rgba(255, 255, 255, 0.2) !important;
         }
         .aw-pill-btn {
             display: inline-flex !important;
@@ -85,9 +245,10 @@ function _injectPanelStyles() {
             justify-content: center !important;
             cursor: pointer !important;
             outline: none !important;
-            transition: all 0.18s cubic-bezier(0.4, 0, 0.2, 1) !important;
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
             user-select: none !important;
             padding: 0 !important;
+            -webkit-tap-highlight-color: transparent !important;
         }
         .aw-pill-btn:hover:not(:disabled) {
             filter: brightness(1.2) !important;
@@ -97,19 +258,141 @@ function _injectPanelStyles() {
             transform: scale(0.94) !important;
         }
         .aw-pill-box:hover {
-            border-color: rgba(255, 255, 255, 0.25) !important;
-            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.75), 0 0 14px rgba(0, 217, 255, 0.22) !important;
+            border-color: rgba(56, 189, 248, 0.45) !important;
+            box-shadow: 0 12px 34px rgba(0, 0, 0, 0.75), 0 0 16px rgba(56, 189, 248, 0.28) !important;
+        }
+        .aw-badge-btn {
+            outline: none !important;
+            -webkit-tap-highlight-color: transparent !important;
+            transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .aw-badge-btn:hover {
+            filter: brightness(1.15) !important;
+            transform: translateY(-0.5px) !important;
+        }
+        .aw-badge-btn:active {
+            transform: scale(0.97) !important;
+        }
+        .aw-mini-stat-pill {
+            background: rgba(13, 18, 30, 0.72) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-radius: 8px !important;
+            padding: 6px 10px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: space-between !important;
+            cursor: pointer !important;
+            user-select: none !important;
+            outline: none !important;
+            -webkit-tap-highlight-color: transparent !important;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+        }
+        .aw-mini-stat-pill:hover {
+            transform: translateY(-1.5px) !important;
+            filter: brightness(1.15) !important;
+        }
+        .aw-mini-stat-pill:active {
+            transform: scale(0.97) !important;
+        }
+        .aw-mini-stat-pill .pill-lbl {
+            font-size: 11.5px !important;
+            font-weight: 700 !important;
+            transition: color 0.2s ease !important;
+        }
+        .aw-mini-stat-pill .stat-val {
+            font-size: 13.5px !important;
+            font-weight: 700 !important;
+            color: #ffffff !important;
+            transition: color 0.2s ease !important;
+        }
+
+        /* Active / Selected Pills (Gambar 3): Show color indicator border & colored label */
+        .aw-mini-stat-pill.pill-str:not(.dimmed) {
+            border-left: 2.5px solid #f43f5e !important;
+        }
+        .aw-mini-stat-pill.pill-str:not(.dimmed) .pill-lbl {
+            color: #f43f5e !important;
+        }
+
+        .aw-mini-stat-pill.pill-edu:not(.dimmed) {
+            border-left: 2.5px solid #38bdf8 !important;
+        }
+        .aw-mini-stat-pill.pill-edu:not(.dimmed) .pill-lbl {
+            color: #38bdf8 !important;
+        }
+
+        .aw-mini-stat-pill.pill-eko:not(.dimmed) {
+            border-left: 2.5px solid #10b981 !important;
+        }
+        .aw-mini-stat-pill.pill-eko:not(.dimmed) .pill-lbl {
+            color: #10b981 !important;
+        }
+
+        /* Unselected / Dimmed Pills (Gambar 2): Border turns gray (NO red/blue/green), text turns gray */
+        .aw-mini-stat-pill.dimmed {
+            opacity: 0.55 !important;
+            background: rgba(13, 18, 30, 0.45) !important;
+            border: 1px solid rgba(255, 255, 255, 0.08) !important;
+            border-left: 1px solid rgba(255, 255, 255, 0.08) !important;
+        }
+        .aw-mini-stat-pill.dimmed .pill-lbl,
+        .aw-mini-stat-pill.dimmed span {
+            color: #64748b !important;
+        }
+        .aw-mini-stat-pill.dimmed .stat-val,
+        .aw-mini-stat-pill.dimmed div {
+            color: #64748b !important;
+        }
+        #aw-training-body {
+            transition: max-height 0.28s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin-top 0.25s ease !important;
+        }
+        #aw-training-body.collapsed {
+            max-height: 0px !important;
+            opacity: 0 !important;
+            margin-top: 0px !important;
+            padding-top: 0px !important;
+            padding-bottom: 0px !important;
+            overflow: hidden !important;
+            pointer-events: none !important;
+        }
+        #aw-training-body.expanded {
+            max-height: 180px !important;
+            opacity: 1 !important;
+            margin-top: 8px !important;
+            overflow: hidden !important;
+            pointer-events: auto !important;
+        }
+        input[type="number"]::-webkit-outer-spin-button,
+        input[type="number"]::-webkit-inner-spin-button {
+            -webkit-appearance: none !important;
+            margin: 0 !important;
+        }
+        /* Battery & GPU Saving: suspend all animations when tab is hidden */
+        .aw-tab-hidden *, .aw-tab-hidden *::before, .aw-tab-hidden *::after {
+            animation-play-state: paused !important;
+        }
+        input[type="number"] {
+            -moz-appearance: textfield !important;
         }
     `;
     document.head.appendChild(style);
+
+    if (typeof document !== 'undefined' && !window.__AW_VISIBILITY_ATTACHED__) {
+        window.__AW_VISIBILITY_ATTACHED__ = true;
+        document.addEventListener('visibilitychange', () => {
+            const panel = document.getElementById('aw-panel');
+            if (panel) {
+                if (document.hidden) {
+                    panel.classList.add('aw-tab-hidden');
+                } else {
+                    panel.classList.remove('aw-tab-hidden');
+                }
+            }
+        });
+    }
 }
 
-export function isDashboardPage() {
-    if (typeof window === 'undefined') return true;
-    const pathname = window.location.pathname || '';
-    const cleanPath = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
-    return cleanPath === '/dashboard' || cleanPath.startsWith('/dashboard/') || cleanPath === '/' || cleanPath === '';
-}
+export { isDashboardPage };
 
 export function shouldPanelBeVisible(state, CONFIG) {
     if (CONFIG.panelDashboardOnly && !isDashboardPage()) {
@@ -147,18 +430,23 @@ export function createPanel(state, CONFIG, ctx) {
     }
 
     setTimeout(() => {
+        const maxX = Math.max(10, window.innerWidth - (state.panelMinimized ? 280 : 376));
+        const maxY = Math.max(10, window.innerHeight - (state.panelMinimized ? 46 : 200));
+        state.panelX = Math.max(10, Math.min(state.panelX ?? 10, maxX));
+        state.panelY = Math.max(10, Math.min(state.panelY ?? 10, maxY));
+
         const panel = document.createElement('div');
         panel.id = 'aw-panel';
         panel.style.cssText = `
             position: fixed; top: ${state.panelY}px; left: ${state.panelX}px;
-            color: #e0e0e0;
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            color: #f1f5f9;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
             font-size: 12px;
             z-index: 99999;
             box-sizing: border-box;
             user-select: none;
-            transition: border-color 0.3s ease, box-shadow 0.3s ease;
             overflow: visible;
+            background: transparent;
             display: ${shouldPanelBeVisible(state, CONFIG) ? 'block' : 'none'};
         `;
         panel.innerHTML = _buildPanelHTML(state, CONFIG);
@@ -175,7 +463,7 @@ export function createPanel(state, CONFIG, ctx) {
             }
         });
 
-        ctx.log('Panel v5.11.0 siap!', 'success');
+        ctx.log('Panel v5.12.0 siap!', 'success', false);
     }, 250);
 }
 
@@ -212,25 +500,29 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     if (energy) {
         state.currentEnergy = energy.current;
         state.maxEnergy = energy.max;
-        if (state.domEnergyStale || !isDashboardPage()) {
-            patchPageVisualEnergy(state.currentEnergy, state.maxEnergy);
-        }
     }
 
     // Keep next work schedule accurately synchronized with current energy
-    if (state.currentEnergy < CONFIG.energyThreshold) {
+    const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
+    if (state.currentEnergy < effectiveThreshold) {
         const rate = state.regenRate || 1.0;
-        const neededMs = Math.max(1, (CONFIG.energyThreshold - state.currentEnergy) / rate) * 60000;
+        const neededMs = Math.max(1, (effectiveThreshold - state.currentEnergy) / rate) * 60000;
         if (!state.nextWorkTimestamp) {
             state.nextWorkTimestamp = Date.now() + neededMs;
         } else if (state.nextWorkTimestamp > Date.now()) {
-            const remaining = state.nextWorkTimestamp - Date.now();
-            if (Math.abs(remaining - neededMs) > 120000) {
-                state.nextWorkTimestamp = Date.now() + neededMs;
+            if (state.serverCooldownUntil && Date.now() < state.serverCooldownUntil) {
+                state.nextWorkTimestamp = Math.max(state.nextWorkTimestamp, state.serverCooldownUntil);
+            } else {
+                const remaining = state.nextWorkTimestamp - Date.now();
+                if (Math.abs(remaining - neededMs) > 120000) {
+                    state.nextWorkTimestamp = Date.now() + neededMs;
+                }
             }
         }
     } else if (state.running && state.isTabLockOwner && !state.workInFlight && !state.workResultUncertain) {
-        if (!state.nextWorkTimestamp || Date.now() >= state.nextWorkTimestamp) {
+        if (state.serverCooldownUntil && Date.now() < state.serverCooldownUntil) {
+            state.nextWorkTimestamp = Math.max(state.nextWorkTimestamp || 0, state.serverCooldownUntil);
+        } else if (!state.nextWorkTimestamp || Date.now() >= state.nextWorkTimestamp) {
             state.nextWorkTimestamp = Date.now();
             ctx.wakePendingWork?.();
         }
@@ -299,8 +591,8 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
         return;
     }
 
-    const threshold = CONFIG.energyThreshold || 10;
-    const isReadyToWork = state.currentEnergy >= threshold;
+    const threshold = getEffectiveEnergyThreshold(state, CONFIG);
+    const isReadyToWork = state.currentEnergy >= threshold && (!state.serverCooldownUntil || Date.now() >= state.serverCooldownUntil);
 
     // Dynamic glow on panel & pill when ready to work
     const panelEl = document.getElementById('aw-panel');
@@ -316,11 +608,13 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     }
 
     // DOM updates
+    const isSyncing = isDashboardPage() && !state.hasInitialDomEnergyRead && (!state.currentEnergy || state.currentEnergy <= 0);
     const safeMax = (state.maxEnergy && state.maxEnergy > 0) ? state.maxEnergy : 110;
     const energyPct = Math.max(0, Math.min(100, (state.currentEnergy / safeMax) * 100));
-    _patchEl('aw-energy-text',   el => el.textContent = `${state.currentEnergy}/${state.maxEnergy}`);
-    _patchEl('aw-energy-bar',    el => el.style.width  = `${energyPct}%`);
-    const liveCountdown = getLiveCountdown(state, CONFIG);
+    _patchEl('aw-energy-text',   el => el.textContent = isSyncing ? 'Sinkronisasi...' : `${state.currentEnergy}/${state.maxEnergy}`);
+    _patchEl('aw-energy-pct',    el => el.textContent = isSyncing ? '(0%)' : `(${Math.round(energyPct)}%)`);
+    _patchEl('aw-energy-bar',    el => el.style.width  = isSyncing ? '0%' : `${energyPct}%`);
+    const liveCountdown = isSyncing ? 'Sinkronisasi...' : getLiveCountdown(state, CONFIG);
     _patchEl('aw-next-work',     el => {
         el.textContent = liveCountdown;
         el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
@@ -333,21 +627,22 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
             el.title = 'Energi target tercapai. Siap bekerja.';
         }
     });
-    _patchEl('aw-full-energy',   el => el.textContent  = getTimeToFullEnergy(state));
+    _patchEl('aw-full-energy',   el => el.textContent  = isSyncing ? 'Sinkronisasi...' : getTimeToFullEnergy(state));
 
     // Pill live updates
-    _patchEl('aw-pill-energy', el => el.textContent = `${state.currentEnergy}/${state.maxEnergy}`);
+    _patchEl('aw-pill-energy', el => el.textContent = isSyncing ? '...' : `${state.currentEnergy}/${state.maxEnergy}`);
     _patchEl('aw-pill-countdown', el => {
-        el.textContent = isReadyToWork ? 'Siap' : liveCountdown;
+        el.textContent = isSyncing ? 'Sinkronisasi...' : (isReadyToWork ? 'Siap' : liveCountdown);
         el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
     });
     _patchEl('aw-pill-countdown-icon', el => {
         el.innerHTML = isReadyToWork ? ICONS.zap : ICONS.clock;
     });
     _patchEl('aw-pill-status-dot', el => {
-        const dotColor = state.workResultUncertain ? '#ffaa00' : (state.running ? '#00ff88' : '#ff4757');
+        const dotColor = state.workResultUncertain ? '#ffaa00' : (state.running ? '#10b981' : '#f43f5e');
         el.style.background = dotColor;
         el.style.boxShadow  = `0 0 8px ${dotColor}`;
+        el.className = state.running ? 'status-dot-active' : '';
     });
     // Live UTC Clock & Server Reset countdown
     const nowUtc = new Date();
@@ -391,12 +686,18 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
         if (foodLeft === 0) {
             el.textContent = 'Kuota habis';
             el.style.color = '#10b981';
+            el.style.background = 'rgba(16, 185, 129, 0.15)';
+            el.style.borderColor = 'rgba(16, 185, 129, 0.3)';
         } else if (minsToReset <= 240 && CONFIG.foodResetReminderEnabled !== false) { // < 4 jam ke reset UTC
             el.textContent = `Sisa ${foodLeft}!`;
             el.style.color = '#f59e0b';
+            el.style.background = 'rgba(245, 158, 11, 0.15)';
+            el.style.borderColor = 'rgba(245, 158, 11, 0.3)';
         } else {
             el.textContent = `${foodLeft} sisa`;
             el.style.color = '#94a3b8';
+            el.style.background = 'rgba(148, 163, 184, 0.12)';
+            el.style.borderColor = 'rgba(148, 163, 184, 0.2)';
         }
     });
 
@@ -411,13 +712,13 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     // Clock time tooltips (Hover to see exact time)
     _patchEl('aw-next-wrap', el => {
         if (isReadyToWork) {
-            el.title = 'Energi sudah mencapai target. Siap bekerja.';
+            el.title = `Energi saat ini (${state.currentEnergy} EN) sudah mencapai target shift (≥ ${threshold} EN). Siap bekerja.`;
         } else if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
             const d = new Date(state.nextWorkTimestamp);
             const timeStr = d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-            el.title = `Estimasi giliran kerja: pk. ${timeStr} WIB`;
+            el.title = `Estimasi mencapai target shift (≥ ${threshold} EN): pk. ${timeStr} WIB`;
         } else {
-            el.title = 'Menunggu energi pulih...';
+            el.title = 'Menunggu energi pulih menuju target shift...';
         }
     });
 
@@ -440,6 +741,12 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
         el.textContent = state.running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA';
         el.style.color = state.running ? '#00ff88' : '#ff7777';
     });
+    _patchEl('aw-mode-title-badge', el => {
+        el.textContent = state.running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA';
+        el.style.background = state.running ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)';
+        el.style.borderColor = state.running ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
+        el.style.color = state.running ? '#34d399' : '#f43f5e';
+    });
     _patchEl('aw-mode-icon', el => {
         el.innerHTML = state.running ? ICONS.zap : ICONS.pause;
         el.style.color = state.running ? '#00ff88' : '#ff7777';
@@ -450,6 +757,153 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     _patchEl('aw-shift-countdown', el => {
         el.textContent = isReadyToWork ? 'Siap Kerja' : liveCountdown;
         el.style.color = isReadyToWork ? '#00ff88' : '#00d9ff';
+    });
+
+    // Auto Training, Bread Quota & Wallet Gold Live Status
+    if (isDashboardPage()) {
+        readTrainingStatsFromDom(state);
+        readBreadQuotaFromDom(state, CONFIG);
+    } else {
+        readWalletGoldFromDom(state);
+    }
+    const trainStatus = getTrainingStatusDisplay(state, CONFIG);
+    const activeStatCount = (CONFIG.trainStrengthEnabled !== false ? 1 : 0) +
+                           (CONFIG.trainEducationEnabled !== false ? 1 : 0) +
+                           (CONFIG.trainEconomyEnabled !== false ? 1 : 0);
+
+    _patchEl('aw-train-count-badge', el => {
+        if (!CONFIG.autoTrainEnabled) {
+            el.textContent = 'Nonaktif';
+            el.style.background = 'rgba(255, 255, 255, 0.05)';
+            el.style.color = '#94a3b8';
+            el.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+        } else if (activeStatCount === 0) {
+            el.textContent = '0/3 Aktif';
+            el.style.background = 'rgba(244, 63, 94, 0.15)';
+            el.style.color = '#fda4af';
+            el.style.borderColor = 'rgba(244, 63, 94, 0.3)';
+        } else {
+            el.textContent = `${activeStatCount}/3 Aktif`;
+            el.style.background = 'rgba(244, 63, 94, 0.15)';
+            el.style.color = '#fda4af';
+            el.style.borderColor = 'rgba(244, 63, 94, 0.3)';
+        }
+    });
+
+    _patchEl('aw-training-body', el => {
+        el.className = CONFIG.autoTrainEnabled ? 'expanded' : 'collapsed';
+    });
+
+    _patchEl('aw-pill-str', el => {
+        el.classList.toggle('dimmed', CONFIG.trainStrengthEnabled === false);
+        el.title = CONFIG.trainStrengthEnabled === false
+            ? 'Kekuatan (STR) dilewati. Klik untuk mengaktifkan.'
+            : 'Kekuatan (STR) aktif. Klik untuk melewati.';
+    });
+    _patchEl('aw-pill-edu', el => {
+        el.classList.toggle('dimmed', CONFIG.trainEducationEnabled === false);
+        el.title = CONFIG.trainEducationEnabled === false
+            ? 'Pendidikan (EDU) dilewati. Klik untuk mengaktifkan.'
+            : 'Pendidikan (EDU) aktif. Klik untuk melewati.';
+    });
+    _patchEl('aw-pill-eko', el => {
+        el.classList.toggle('dimmed', CONFIG.trainEconomyEnabled === false);
+        el.title = CONFIG.trainEconomyEnabled === false
+            ? 'Ekonomi (EKO) dilewati. Klik untuk mengaktifkan.'
+            : 'Ekonomi (EKO) aktif. Klik untuk melewati.';
+    });
+
+    _patchEl('aw-train-str-val', el => el.textContent = String(state.trainingStats?.strength ?? '--'));
+    _patchEl('aw-train-edu-val', el => el.textContent = String(state.trainingStats?.education ?? '--'));
+    _patchEl('aw-train-eko-val', el => el.textContent = String(state.trainingStats?.economy ?? '--'));
+
+    _patchEl('aw-train-focus-label', el => {
+        const textEl = document.getElementById('aw-train-focus-text') || el;
+        const iconEl = document.getElementById('aw-train-target-icon');
+        let iconColor = '#fda4af';
+        if (!CONFIG.autoTrainEnabled) {
+            textEl.textContent = 'Auto Latihan Nonaktif';
+            el.style.color = '#64748b';
+            iconColor = '#64748b';
+        } else if (activeStatCount === 0) {
+            textEl.textContent = 'Semua stat nonaktif (Pilih di kartu)';
+            el.style.color = '#f59e0b';
+            iconColor = '#f59e0b';
+        } else if (state.activeTraining?.stat) {
+            const statMap = { strength: 'Kekuatan', education: 'Pendidikan', economy: 'Ekonomi' };
+            const statColorMap = { strength: '#f43f5e', education: '#38bdf8', economy: '#10b981' };
+            const statName = statMap[state.activeTraining.stat] || state.activeTraining.stat;
+            const targetLv = state.activeTraining.targetLevel ? ` Lv ${state.activeTraining.targetLevel}` : '';
+            textEl.textContent = `Fokus: ${statName}${targetLv}`;
+            iconColor = statColorMap[state.activeTraining.stat] || '#f43f5e';
+            el.style.color = iconColor;
+        } else if (trainStatus.timerText === 'MAX') {
+            if (activeStatCount === 1) {
+                const targetStat = CONFIG.trainStrengthEnabled !== false ? 'Kekuatan' : (CONFIG.trainEducationEnabled !== false ? 'Pendidikan' : 'Ekonomi');
+                const targetLv = CONFIG.trainStrengthEnabled !== false ? (CONFIG.targetStrength || 100) : (CONFIG.trainEducationEnabled !== false ? (CONFIG.targetEducation || 100) : (CONFIG.targetEconomy || 100));
+                textEl.textContent = `Target ${targetStat} Lv ${targetLv} Tercapai!`;
+            } else {
+                textEl.textContent = 'Semua Target Tercapai (MAX)';
+            }
+            el.style.color = '#34d399';
+            iconColor = '#34d399';
+        } else {
+            if (activeStatCount === 1) {
+                if (CONFIG.trainStrengthEnabled !== false) {
+                    textEl.textContent = `Fokus: Kekuatan Lv ${CONFIG.targetStrength || 83}`;
+                    el.style.color = '#fda4af';
+                    iconColor = '#f43f5e';
+                } else if (CONFIG.trainEducationEnabled !== false) {
+                    textEl.textContent = `Fokus: Pendidikan Lv ${CONFIG.targetEducation || 100}`;
+                    el.style.color = '#7dd3fc';
+                    iconColor = '#38bdf8';
+                } else {
+                    textEl.textContent = `Fokus: Ekonomi Lv ${CONFIG.targetEconomy || 100}`;
+                    el.style.color = '#6ee7b7';
+                    iconColor = '#10b981';
+                }
+            } else {
+                textEl.textContent = `Rotasi Multi-Stat (${activeStatCount} Stat Aktif)`;
+                el.style.color = '#38bdf8';
+                iconColor = '#38bdf8';
+            }
+        }
+        if (iconEl) iconEl.style.color = iconColor;
+    });
+
+    _patchEl('aw-train-timer-text', el => {
+        el.textContent = trainStatus.timerText;
+        el.style.color = trainStatus.isActive ? '#ffffff' : (trainStatus.timerText === 'MAX' ? '#34d399' : (CONFIG.autoTrainEnabled ? '#38bdf8' : '#64748b'));
+    });
+
+    _patchEl('aw-train-progress-bar', el => {
+        if (!state.activeTraining?.endsAt) {
+            el.style.width = '0%';
+        } else {
+            const pct = getTrainingProgressPercentage(state.activeTraining, state.trainingStats);
+            el.style.width = `${pct}%`;
+        }
+    });
+
+    _patchEl('aw-train-badge-dot', el => {
+        el.style.background = CONFIG.autoTrainEnabled ? '#10b981' : '#64748b';
+        el.style.boxShadow = CONFIG.autoTrainEnabled ? '0 0 6px #10b981' : 'none';
+    });
+    _patchEl('aw-train-badge-text', el => {
+        el.textContent = CONFIG.autoTrainEnabled ? 'AKTIF' : '• OFF';
+    });
+    _patchEl('aw-training-toggle-badge', el => {
+        if (CONFIG.autoTrainEnabled) {
+            el.className = 'btn-cyber';
+            el.style.background = 'rgba(16, 185, 129, 0.2)';
+            el.style.color = '#34d399';
+            el.style.borderColor = 'rgba(16, 185, 129, 0.4)';
+        } else {
+            el.className = 'btn-cyber badge-train-off';
+            el.style.background = '';
+            el.style.color = '';
+            el.style.borderColor = '';
+        }
     });
     _patchEl('aw-token-status',  el => {
         const isExpired = Boolean(
@@ -481,45 +935,50 @@ export function updatePanel(state, CONFIG, workHistory, ctx) {
     _patchEl('aw-toggle',   el => el.disabled = blocked);
     _patchEl('aw-pill-toggle', el => el.disabled = blocked);
 
-    if (!state.tabLockManaged || state.isTabLockOwner || (isDashboardPage() && !document.hidden)) {
-        saveLiveStatus(state, CONFIG);
+    if (!state.tabLockManaged || state.isTabLockOwner || isDashboardPage()) {
+        if (state.hasInitialDomEnergyRead || state.currentEnergy > 0 || state.postShiftEnergy === 0) {
+            saveLiveStatus(state, CONFIG);
+        }
     }
 }
 
 /** Updates only the running indicator buttons — called from doWork on pause/resume. */
 export function setRunningUI(running) {
+    _patchEl('aw-toggle-text', el => el.textContent = running ? 'Jeda Bot' : 'Lanjutkan');
+    _patchEl('aw-toggle-icon', el => el.innerHTML = running ? ICONS.pause : ICONS.play);
     _patchEl('aw-toggle', el => {
-        el.innerHTML = running
-            ? `<span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.pause} Jeda</span>`
-            : `<span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.play} Lanjut</span>`;
         el.style.background = running
-            ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
-            : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-        el.style.boxShadow = `0 2px 8px ${running ? 'rgba(239,68,68,0.3)' : 'rgba(16,185,129,0.3)'}`;
+            ? 'rgba(244, 63, 94, 0.2)'
+            : 'rgba(16, 185, 129, 0.2)';
+        el.style.borderColor = running
+            ? 'rgba(244, 63, 94, 0.45)'
+            : 'rgba(16, 185, 129, 0.45)';
+        el.style.color = running ? '#fda4af' : '#6ee7b7';
     });
     _patchEl('aw-status-dot', el => {
-        el.style.background = running ? '#00ff88' : '#ff4757';
-        el.style.boxShadow  = `0 0 8px ${running ? '#00ff88' : '#ff4757'}`;
+        el.className = running ? 'status-dot-active' : '';
+        el.style.background = running ? '#10b981' : '#f43f5e';
     });
-    _patchEl('aw-mode-title', el => {
+    _patchEl('aw-mode-title-badge', el => {
         el.textContent = running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA';
-        el.style.color = running ? '#00ff88' : '#ff7777';
-    });
-    _patchEl('aw-mode-icon', el => {
-        el.innerHTML = running ? ICONS.zap : ICONS.pause;
-        el.style.color = running ? '#00ff88' : '#ff7777';
+        el.style.background = running ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)';
+        el.style.borderColor = running ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)';
+        el.style.color = running ? '#34d399' : '#f43f5e';
     });
     _patchEl('aw-pill-toggle', el => {
         el.innerHTML = running ? ICONS.pause : ICONS.play;
         el.title = running ? 'Jeda Worker' : 'Lanjutkan Worker';
         el.style.background = running
-            ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)'
-            : 'linear-gradient(135deg, #10b981 0%, #059669 100%)';
-        el.style.boxShadow = `0 2px 6px ${running ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.35)'}`;
+            ? 'rgba(244, 63, 94, 0.2)'
+            : 'rgba(16, 185, 129, 0.2)';
+        el.style.borderColor = running
+            ? 'rgba(244, 63, 94, 0.4)'
+            : 'rgba(16, 185, 129, 0.4)';
+        el.style.color = running ? '#fda4af' : '#6ee7b7';
     });
     _patchEl('aw-pill-status-dot', el => {
-        el.style.background = running ? '#00ff88' : '#ff4757';
-        el.style.boxShadow  = `0 0 8px ${running ? '#00ff88' : '#ff4757'}`;
+        el.className = running ? 'status-dot-active' : '';
+        el.style.background = running ? '#10b981' : '#f43f5e';
     });
 }
 
@@ -539,6 +998,15 @@ export function togglePanelVisibility(state, CONFIG) {
     state.userManuallyToggledPanel = true;
     panel.style.display = state.panelVisible ? 'block' : 'none';
     setValue('panelVisible', state.panelVisible.toString());
+
+    if (!state.panelVisible) {
+        showInPageNotification(
+            'Panel Auto Worker Disembunyikan',
+            'Tekan ' + (CONFIG?.shortcuts?.showHide?.display || 'Ctrl+Shift+A') + ' atau buka Pengaturan (' + (CONFIG?.shortcuts?.openSettings?.display || 'Ctrl+Shift+S') + ') untuk memunculkan kembali.'
+        );
+    } else {
+        showInPageNotification('Panel Auto Worker Aktif', 'Panel in-game berhasil dimunculkan kembali.');
+    }
 }
 
 // ─── Private ──────────────────────────────────────────────────────────────────
@@ -559,9 +1027,16 @@ export function applyPanelMode(state, isMin) {
 
     if (!panel) return;
 
+    // Ensure the panel itself is visible when switching modes
+    state.panelVisible = true;
+    state.userManuallyToggledPanel = false;
+    setValue('panelVisible', 'true');
+    panel.style.display = 'block';
+
     if (state.panelMinimized) {
         if (fullContainer) fullContainer.style.display = 'none';
         if (pillContainer) pillContainer.style.display = 'flex';
+
         panel.style.width = 'auto';
         panel.style.minWidth = '0';
         panel.style.maxWidth = 'none';
@@ -573,34 +1048,56 @@ export function applyPanelMode(state, isMin) {
         panel.style.borderRadius = '999px';
         panel.style.padding = '0';
         panel.style.overflow = 'visible';
+
+        // Clamp coordinates within visible viewport so pill never gets lost
+        const maxX = Math.max(10, window.innerWidth - 300);
+        const maxY = Math.max(10, window.innerHeight - 46);
+        if (state.panelX > maxX || state.panelX < 10) {
+            state.panelX = Math.max(10, Math.min(state.panelX || 10, maxX));
+            panel.style.left = state.panelX + 'px';
+            setValue('panelX', state.panelX.toString());
+        }
+        if (state.panelY > maxY || state.panelY < 10) {
+            state.panelY = Math.max(10, Math.min(state.panelY || 10, maxY));
+            panel.style.top = state.panelY + 'px';
+            setValue('panelY', state.panelY.toString());
+        }
+
         if (minimizeBtn) {
             minimizeBtn.innerHTML = ICONS.expand;
             minimizeBtn.title = 'Perbesar Panel';
         }
     } else {
-        // Prevent overflowing the right viewport edge when expanding
-        const maxX = window.innerWidth - 335;
+        // Prevent overflowing the viewport edge when expanding
+        const maxX = Math.max(10, window.innerWidth - 376);
+        const maxY = Math.max(10, window.innerHeight - 100);
         if (state.panelX > maxX && maxX > 0) {
             state.panelX = Math.max(10, maxX);
             panel.style.left = state.panelX + 'px';
             setValue('panelX', state.panelX.toString());
         }
+        if (state.panelY > maxY && maxY > 0) {
+            state.panelY = Math.max(10, maxY);
+            panel.style.top = state.panelY + 'px';
+            setValue('panelY', state.panelY.toString());
+        }
 
-        if (fullContainer) fullContainer.style.display = 'block';
+        if (fullContainer) fullContainer.style.display = 'flex';
         if (pillContainer) pillContainer.style.display = 'none';
-        panel.style.width = '315px';
-        panel.style.minWidth = '315px';
-        panel.style.maxWidth = '325px';
-        panel.style.background = 'rgba(18, 22, 34, 0.92)';
-        panel.style.backdropFilter = 'blur(14px)';
-        panel.style.webkitBackdropFilter = 'blur(14px)';
-        panel.style.border = '1px solid rgba(255, 255, 255, 0.08)';
-        panel.style.borderRadius = '12px';
-        panel.style.boxShadow = '0 16px 40px rgba(0, 0, 0, 0.55), 0 0 1px rgba(255, 255, 255, 0.15)';
+
+        panel.style.width = '356px';
+        panel.style.minWidth = '356px';
+        panel.style.maxWidth = '356px';
+        panel.style.background = 'transparent';
+        panel.style.backdropFilter = 'none';
+        panel.style.webkitBackdropFilter = 'none';
+        panel.style.border = 'none';
+        panel.style.boxShadow = 'none';
+        panel.style.borderRadius = '16px';
         panel.style.padding = '0';
         panel.style.overflow = 'visible';
         if (minimizeBtn) {
-            minimizeBtn.innerHTML = ICONS.minimize;
+            minimizeBtn.innerHTML = ICONS.shrink;
             minimizeBtn.title = 'Mode Ringkas (Pill)';
         }
     }
@@ -610,267 +1107,336 @@ function _buildPanelHTML(state, CONFIG) {
     const isMin    = Boolean(state.panelMinimized);
     const isPinned = CONFIG.panelPinned;
     const running  = state.running;
+    const safeMax  = (state.maxEnergy && state.maxEnergy > 0) ? state.maxEnergy : 110;
+    const energyPct = Math.max(0, Math.min(100, Math.round(((state.currentEnergy || 0) / safeMax) * 100)));
 
     return `
-        <!-- Full Panel View -->
-        <div id="aw-full-container" style="display: ${isMin ? 'none' : 'block'}; width: 100%;">
+        <!-- Full Panel View (Argon Surface A - 356px Cyber Abyss Glass Shell) -->
+        <div id="aw-full-container" class="paw-shell" style="
+            display: ${isMin ? 'none' : 'flex'};
+            flex-direction: column;
+            gap: 10px;
+            width: 356px;
+            border-radius: 16px;
+            padding: 14px;
+            position: relative;
+            overflow: hidden;
+            box-sizing: border-box;
+        ">
+            <!-- Top Subtle Accent Cyan Glow Line -->
+            <div style="position: absolute; top: 0; left: 24px; right: 24px; height: 1px; background: linear-gradient(90deg, transparent, rgba(56, 189, 248, 0.6), transparent); pointer-events: none;"></div>
+
+            <!-- 1. Header Bar -->
             <div id="aw-header" style="
-                background: linear-gradient(135deg, rgba(26, 32, 53, 0.98) 0%, rgba(18, 22, 34, 0.98) 100%);
-                padding: 10px 12px; cursor: ${isPinned ? 'default' : 'move'};
-                border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-                display: flex; justify-content: space-between; align-items: center;
-                border-radius: 12px 12px 0 0;
-                gap: 8px; box-sizing: border-box; width: 100%;
+                display: flex; align-items: center; justify-content: space-between;
+                padding-bottom: 8px; border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+                cursor: ${isPinned ? 'default' : 'move'}; user-select: none;
             ">
-                <div style="display:flex;align-items:center;gap:7px;flex-shrink:0;min-width:0;">
-                    <span style="color:#38bdf8;display:flex;align-items:center;flex-shrink:0;">${ICONS.robot}</span>
-                    <span style="font-weight:700;color:#fff;font-size:12px;letter-spacing:0.5px;text-transform:uppercase;white-space:nowrap;">Auto Worker</span>
-                    <span id="aw-status-dot" style="
-                        width:7px;height:7px;border-radius:50%;display:inline-block;flex-shrink:0;
-                        background:${running ? '#00ff88' : '#ff4757'};
-                        box-shadow:0 0 8px ${running ? '#00ff88' : '#ff4757'};
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 28px; height: 28px; border-radius: 8px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); display: flex; align-items: center; justify-content: center; color: #38bdf8; flex-shrink: 0;">
+                        ${ICONS.robot}
+                    </div>
+                    <span style="font-size: 13px; font-weight: 700; letter-spacing: 0.6px; color: #ffffff; text-transform: uppercase;">AUTO WORKER</span>
+                    <span id="aw-status-dot" class="${running ? 'status-dot-active' : ''}" style="
+                        width: 10px; height: 10px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+                        background: ${running ? '#10b981' : '#f43f5e'};
                     "></span>
                 </div>
-                <div style="display:flex;align-items:center;gap:2px;flex-shrink:0;">
-                    <button id="aw-minimize"  class="aw-header-btn" title="Mode Ringkas (Pill)" style="${HEADER_BTN_STYLE}">${ICONS.minimize}</button>
-                    <button id="aw-pin"       class="aw-header-btn" title="${isPinned ? 'Unpin' : 'Pin'}" style="${HEADER_BTN_STYLE} background:${isPinned ? 'rgba(0, 136, 255, 0.2)' : 'transparent'};color:${isPinned ? '#00d9ff' : '#8892b0'};border:${isPinned ? '1px solid rgba(0, 136, 255, 0.4)' : 'none'};">${isPinned ? ICONS.lockClosed : ICONS.lockOpen}</button>
-                    <button id="aw-settings"  class="aw-header-btn" title="Pengaturan" style="${HEADER_BTN_STYLE}">${ICONS.settings}</button>
-                    <button id="aw-hide"      class="aw-header-btn" title="Sembunyikan (${CONFIG.shortcuts.showHide.display})" style="${HEADER_BTN_STYLE}color:#ff5252;margin-left:2px;">${ICONS.close}</button>
+                <div style="display: flex; align-items: center; gap: 4px;">
+                    <button id="aw-minimize" class="btn-cyber aw-header-btn" title="Mode Ringkas (Floating Pill)" style="
+                        width: 28px; height: 28px; border-radius: 8px; background: rgba(30, 41, 59, 0.8);
+                        border: 1px solid rgba(255, 255, 255, 0.1); color: #cbd5e1; display: flex;
+                        align-items: center; justify-content: center; cursor: pointer;
+                    ">${isMin ? ICONS.expand : ICONS.shrink}</button>
+                    <button id="aw-pin" class="btn-cyber aw-header-btn" title="${isPinned ? 'Lepas Kunci (Unpin)' : 'Kunci Posisi (Pin)'}" style="
+                        width: 28px; height: 28px; border-radius: 8px;
+                        background: ${isPinned ? 'rgba(56, 189, 248, 0.2)' : 'rgba(30, 41, 59, 0.8)'};
+                        border: 1px solid ${isPinned ? 'rgba(56, 189, 248, 0.4)' : 'rgba(255, 255, 255, 0.1)'};
+                        color: ${isPinned ? '#38bdf8' : '#cbd5e1'}; display: flex;
+                        align-items: center; justify-content: center; cursor: pointer;
+                    ">${isPinned ? ICONS.lockClosed : ICONS.lockOpen}</button>
+                    <button id="aw-settings" class="btn-cyber aw-header-btn" title="Pengaturan" style="
+                        width: 28px; height: 28px; border-radius: 8px; background: rgba(30, 41, 59, 0.8);
+                        border: 1px solid rgba(255, 255, 255, 0.1); color: #cbd5e1; display: flex;
+                        align-items: center; justify-content: center; cursor: pointer;
+                    ">${ICONS.settings}</button>
+                    <button id="aw-hide" class="btn-cyber aw-header-btn" title="Sembunyikan (${CONFIG.shortcuts.showHide.display})" style="
+                        width: 28px; height: 28px; border-radius: 8px; background: rgba(30, 41, 59, 0.8);
+                        border: 1px solid rgba(255, 255, 255, 0.1); color: #cbd5e1; display: flex;
+                        align-items: center; justify-content: center; cursor: pointer;
+                    ">${ICONS.close}</button>
                 </div>
             </div>
-            <div id="aw-body" style="padding: 12px; display: block;">
-                <div id="aw-circuit-breaker-banner" style="display:${state.circuitBreakerActive ? 'block' : 'none'};margin-bottom:10px;padding:8px 10px;background:rgba(239,68,68,0.18);border:1px solid rgba(239,68,68,0.4);border-radius:6px;color:#fca5a5;font-size:11px;line-height:1.4;text-align:center;font-weight:600;">
-                    Pemeriksaan keamanan aktif (${state.circuitBreakerReason || 'Cloudflare/Maintenance'}). Worker dijeda.
-                </div>
-                <div id="aw-uncertain-banner" style="display:${state.workResultUncertain ? 'block' : 'none'};margin-bottom:10px;padding:9px;background:rgba(255,68,68,0.12);border:1px solid rgba(255,68,68,0.55);border-radius:6px;color:#ffb3b3;font-size:11px;line-height:1.4;">
-                    <div style="display:flex;align-items:center;gap:6px;font-weight:700;color:#ff7777;margin-bottom:4px;">
-                        <span style="display:flex;align-items:center;">${ICONS.alert}</span> Hasil kerja belum pasti
-                    </div>
-                    <div>Periksa halaman game sebelum melanjutkan.</div>
-                    <div id="aw-reconciliation-status" style="margin-top:4px;color:#ffd166;">Status rekonsiliasi: menunggu pembacaan energi.</div>
-                    <button id="aw-confirm-uncertain" style="margin-top:7px;padding:5px 8px;background:#8f3030;color:#fff;border:1px solid #b44;border-radius:4px;cursor:pointer;font-size:10px;">Saya sudah memeriksa, lanjutkan</button>
-                </div>
 
-                <!-- Region & Buff Badge -->
-                <div id="aw-region-badge" style="
-                    display: flex; align-items: center; justify-content: space-between;
-                    background: linear-gradient(135deg, rgba(56, 189, 248, 0.08) 0%, rgba(16, 185, 129, 0.05) 100%);
-                    border: 1px solid rgba(56, 189, 248, 0.2);
-                    border-radius: 8px;
-                    padding: 6px 10px;
-                    margin-bottom: 9px;
-                    font-size: 11px;
-                ">
-                    <div style="display:flex;align-items:center;gap:6px;overflow:hidden;">
-                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.mapPin}</span>
-                        <span id="aw-region-name" style="font-weight:600;color:#f1f5f9;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px;">${state.regionName || 'Memuat wilayah...'}</span>
+            <!-- Banners -->
+            <div id="aw-circuit-breaker-banner" style="display: ${state.circuitBreakerActive ? 'block' : 'none'}; padding: 8px 12px; background: rgba(244, 63, 94, 0.18); border: 1px solid rgba(244, 63, 94, 0.4); border-radius: 8px; color: #fca5a5; font-size: 11.5px; line-height: 1.4; text-align: center; font-weight: 600;">
+                Pemeriksaan keamanan aktif (${state.circuitBreakerReason || 'Cloudflare/Maintenance'}). Worker dijeda.
+            </div>
+            <div id="aw-uncertain-banner" style="display: ${state.workResultUncertain ? 'block' : 'none'}; padding: 9px 12px; background: rgba(244, 63, 94, 0.14); border: 1px solid rgba(244, 63, 94, 0.5); border-radius: 8px; color: #fecdd3; font-size: 11.5px; line-height: 1.4;">
+                <div style="display: flex; align-items: center; gap: 6px; font-weight: 700; color: #f43f5e; margin-bottom: 3px;">
+                    <span style="display: flex; align-items: center;">${ICONS.alert}</span> Hasil kerja belum pasti
+                </div>
+                <div>Periksa halaman game sebelum melanjutkan.</div>
+                <div id="aw-reconciliation-status" style="margin-top: 3px; color: #fcd34d;">Status rekonsiliasi: menunggu pembacaan energi.</div>
+                <button id="aw-confirm-uncertain" class="btn-cyber" style="margin-top: 6px; padding: 5px 9px; background: #991b1b; color: #fff; border: 1px solid #dc2626; border-radius: 6px; cursor: pointer; font-size: 11px; font-weight: 600;">Saya sudah memeriksa, lanjutkan</button>
+            </div>
+
+            <!-- 2. Location & Buff + Server UTC Row (in 1 .paw-card) -->
+            <div class="paw-card" style="padding: 10px; display: flex; flex-direction: column; gap: 8px;">
+                <!-- Location & Buff -->
+                <div id="aw-region-badge" style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 7px; overflow: hidden;">
+                        <span style="color: #38bdf8; display: flex; align-items: center; flex-shrink: 0;">${ICONS.mapPin}</span>
+                        <span style="color: #94a3b8; font-size: 11.5px;">Lokasi:</span>
+                        <span id="aw-region-name" style="font-weight: 600; color: #ffffff; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 140px;">${state.regionName || 'Memuat wilayah...'}</span>
                     </div>
-                    <span id="aw-region-buff" style="
-                        background: rgba(16, 185, 129, 0.14);
-                        color: #10b981;
-                        border: 1px solid rgba(16, 185, 129, 0.3);
-                        padding: 1px 7px;
-                        border-radius: 4px;
-                        font-weight: 700;
-                        font-size: 9.5px;
-                        white-space: nowrap;
+                    <span id="aw-region-buff" class="tabular-nums" style="
+                        background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3);
+                        padding: 2px 7px; border-radius: 6px; font-weight: 600; font-size: 11px; white-space: nowrap;
                     ">${state.regionHealthBonusPercent ? `+${state.regionHealthBonusPercent}% Regen` : 'Normal (1.0x)'}</span>
                 </div>
 
-                <!-- Server Time (UTC) & Daily Reset Bar -->
-                <div id="aw-utc-bar" style="
-                    display: flex; align-items: center; justify-content: space-between;
-                    background: rgba(255, 255, 255, 0.025);
-                    border: 1px solid rgba(255, 255, 255, 0.06);
-                    border-radius: 7px;
-                    padding: 6px 10px;
-                    margin-bottom: 9px;
-                    font-size: 10.5px;
-                    white-space: nowrap;
-                    box-sizing: border-box;
-                ">
-                    <div style="display:flex;align-items:center;gap:6px;white-space:nowrap;flex-shrink:0;">
-                        <span style="color:#38bdf8;display:flex;align-items:center;flex-shrink:0;">${ICONS.clock}</span>
-                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Waktu Server:</span>
-                        <span id="aw-utc-time" style="color:#38bdf8;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">00:00:00 UTC</span>
-                        <span id="aw-flush-badge" style="display:none;background:rgba(245,158,11,0.2);color:#f59e0b;border:1px solid rgba(245,158,11,0.4);border-radius:4px;padding:0 5px;font-size:9px;font-weight:700;white-space:nowrap;flex-shrink:0;">JAM EMAS</span>
-                    </div>
-                    <span id="aw-utc-reset" style="font-size:9.5px;color:#718096;font-weight:500;white-space:nowrap;flex-shrink:0;margin-left:auto;" title="Reset harian server (jatah makanan & bonus) terjadi pada pukul 00:00 UTC">Reset: --j --m</span>
-                </div>
+                <div style="height: 1px; background: rgba(255, 255, 255, 0.06);"></div>
 
-                <!-- Daily Food Slots Bar -->
-                <div id="aw-food-bar" title="Jatah harian server Parlementum (10 slot). Otomatis bertambah saat makan roti di game dan di-reset setiap 00:00 UTC." style="
-                    display: flex; align-items: center; justify-content: space-between;
-                    background: rgba(255, 255, 255, 0.025);
-                    border: 1px solid rgba(255, 255, 255, 0.05);
-                    border-radius: 7px;
-                    padding: 6px 10px;
-                    margin-bottom: 9px;
-                    font-size: 10.5px;
-                    white-space: nowrap;
-                    box-sizing: border-box;
-                ">
-                    <div style="display:flex;align-items:center;gap:5px;white-space:nowrap;flex-shrink:0;">
-                        <span style="color:#f59e0b;display:flex;align-items:center;flex-shrink:0;">${ICONS.utensils}</span>
-                        <span style="color:#94a3b8;font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Slot Makanan:</span>
-                        <span id="aw-food-slot-text" style="color:#f59e0b;font-weight:700;font-family:ui-monospace,Menlo,monospace;letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">${state.foodEatenToday || 0}/${CONFIG.maxFoodDaily || 10}</span>
-                        <span style="color:#475569;font-size:9px;margin:0 1px;">•</span>
-                        <span id="aw-food-reminder" style="font-size:9.5px;color:#94a3b8;font-weight:500;white-space:nowrap;flex-shrink:0;">${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? 'Kuota habis' : `${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0)} sisa`}</span>
+                <!-- Server UTC & Reset -->
+                <div id="aw-utc-bar" style="display: flex; align-items: center; justify-content: space-between;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color: #818cf8; display: flex; align-items: center; flex-shrink: 0;">${ICONS.clock}</span>
+                        <span id="aw-utc-time" class="tabular-nums" style="color: #e2e8f0; font-weight: 600; font-size: 12.5px;">00:00:00 UTC</span>
                     </div>
-                    <div style="display:inline-flex;align-items:center;gap:2px;flex-shrink:0;margin-left:auto;" title="Koreksi manual jika diperlukan (deteksi otomatis tetap aktif)">
-                        <button id="aw-food-dec" type="button" title="Kurangi 1 kuota makanan (koreksi manual)" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">-</button>
-                        <button id="aw-food-inc" type="button" title="Tambah 1 kuota makanan (koreksi manual)" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.12);color:#94a3b8;border-radius:3px;padding:0 5px;font-size:10px;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">+</button>
-                        <button id="aw-food-max" type="button" title="Set kuota penuh (koreksi manual)" style="background:rgba(245,158,11,0.15);border:1px solid rgba(245,158,11,0.35);color:#f59e0b;border-radius:3px;padding:0 5px;font-size:9px;font-weight:600;cursor:pointer;line-height:1.3;transition:all 0.15s ease;">Max</button>
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span id="aw-utc-reset" class="tabular-nums" style="font-size: 11.5px; color: #94a3b8;">Reset: --j --m</span>
+                        <span id="aw-flush-badge" class="badge-flush-pulse tabular-nums" style="display: none; background: rgba(245, 158, 11, 0.2); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.4); border-radius: 4px; padding: 1px 6px; font-size: 10.5px; font-weight: 700; letter-spacing: 0.3px;">FLUSH</span>
                     </div>
                 </div>
+            </div>
 
-                <!-- Energy Card -->
-                <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.07);padding:10px 12px;border-radius:9px;margin-bottom:9px;">
-                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;font-size:11px;">
-                        <span style="display:flex;align-items:center;gap:5px;color:#94a3b8;font-size:10px;font-weight:700;letter-spacing:0.5px;text-transform:uppercase;">
-                            <span style="color:#00ff88;display:flex;align-items:center;">${ICONS.zap}</span> Energi
-                        </span>
-                        <span id="aw-energy-text" style="color:#00ff88;font-weight:700;letter-spacing:0.3px;font-family:ui-monospace,Menlo,monospace;">${state.currentEnergy}/${state.maxEnergy}</span>
+            <!-- 3. Food Tracker (Roti) -->
+            <div id="aw-food-bar" class="paw-card" style="padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <div style="width: 28px; height: 28px; border-radius: 8px; background: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.25); display: flex; align-items: center; justify-content: center; color: #f59e0b; flex-shrink: 0;">
+                        ${ICONS.utensils}
                     </div>
-                    <div style="background:rgba(0,0,0,0.5);height:7px;border-radius:999px;overflow:hidden;border:1px solid rgba(255,255,255,0.07);padding:1px;">
-                        <div id="aw-energy-bar" style="height:100%;width:${(state.currentEnergy / state.maxEnergy) * 100}%;background:linear-gradient(90deg, #38bdf8, #10b981);border-radius:999px;transition:width 0.3s ease;box-shadow:0 0 8px rgba(0,255,136,0.35);"></div>
-                    </div>
-                    <div style="display:flex;justify-content:space-between;font-size:10px;color:#718096;margin-top:6px;">
-                        <span id="aw-next-wrap" style="cursor:help;">Next: <span id="aw-next-work" style="color:#00ff88;font-weight:600;">Now</span></span>
-                        <span id="aw-full-wrap" style="cursor:help;">Full: <span id="aw-full-energy" style="color:#38bdf8;font-weight:500;">${getTimeToFullEnergy(state)}</span></span>
+                    <div>
+                        <div style="font-size: 11px; color: #94a3b8; font-weight: 500;">Kuota Roti Harian</div>
+                        <div style="font-size: 10.5px; color: #64748b;">Sinkron Otomatis</div>
                     </div>
                 </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span id="aw-food-slot-text" class="tabular-nums" style="font-size: 13.5px; font-weight: 700; color: #ffffff;">${state.foodEatenToday || 0}/${CONFIG.maxFoodDaily || 10}</span>
+                    <span id="aw-food-reminder" class="tabular-nums" style="font-size: 11px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: ${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? 'rgba(16, 185, 129, 0.15)' : 'rgba(245, 158, 11, 0.15)'}; border: 1px solid ${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? 'rgba(16, 185, 129, 0.3)' : 'rgba(245, 158, 11, 0.3)'}; color: ${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? '#10b981' : '#fbbf24'};">${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0) === 0 ? 'Kuota habis' : `${(CONFIG.maxFoodDaily || 10) - (state.foodEatenToday || 0)} sisa`}</span>
+                </div>
+            </div>
 
-                <!-- Focused Auto Work Status Section -->
-                <div style="background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);padding:8px 10px;border-radius:8px;margin-bottom:9px;display:flex;align-items:center;justify-content:space-between;font-size:11px;">
-                    <div style="display:flex;align-items:center;gap:7px;">
-                        <span id="aw-mode-icon" style="color:${running ? '#00ff88' : '#ff7777'};display:flex;align-items:center;">${running ? ICONS.zap : ICONS.pause}</span>
-                        <div>
-                            <div id="aw-mode-title" style="font-weight:700;color:${running ? '#00ff88' : '#ff7777'};font-size:11px;">${running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA'}</div>
-                            <div style="font-size:9.5px;color:#718096;">Target: ≥ <span id="aw-target-threshold">${CONFIG.energyThreshold || 10}</span> EN</div>
+            <!-- 4. Live Energy Card -->
+            <div class="paw-card" style="padding: 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: baseline;">
+                    <div style="display: flex; align-items: center; gap: 6px;">
+                        <span style="color: #38bdf8; display: flex; align-items: center;">${ICONS.zap}</span>
+                        <span style="font-size: 11.5px; font-weight: 700; letter-spacing: 0.5px; color: #cbd5e1; text-transform: uppercase;">ENERGI</span>
+                    </div>
+                    <div style="display: flex; align-items: baseline; gap: 4px;">
+                        <span id="aw-energy-text" class="tabular-nums" style="font-size: 19px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">${(isDashboardPage() && !state.hasInitialDomEnergyRead && (!state.currentEnergy || state.currentEnergy <= 0)) ? 'Sinkronisasi...' : `${state.currentEnergy}/${state.maxEnergy}`}</span>
+                        <span id="aw-energy-pct" class="tabular-nums" style="font-size: 12px; color: #38bdf8; font-family: 'JetBrains Mono', monospace;">(${energyPct}%)</span>
+                    </div>
+                </div>
+                <div style="width: 100%; height: 9px; border-radius: 999px; background: rgba(10, 14, 26, 0.95); border: 1px solid rgba(255, 255, 255, 0.1); overflow: hidden; padding: 1px; box-sizing: border-box;">
+                    <div id="aw-energy-bar" class="energy-progress-fill" style="height: 100%; width: ${energyPct}%;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center; font-size: 11.5px; color: #94a3b8; padding-top: 1px;">
+                    <span id="aw-next-wrap" style="cursor: help;">Next: <span id="aw-next-work" class="tabular-nums" style="color: #38bdf8; font-weight: 600;">Now</span></span>
+                    <span id="aw-full-wrap" style="cursor: help;">Full: <span id="aw-full-energy" class="tabular-nums" style="color: #cbd5e1; font-weight: 600;">${getTimeToFullEnergy(state)}</span></span>
+                </div>
+            </div>
+
+            <!-- 5. Focused Auto Work Status Card -->
+            <div class="paw-card rounded-xl" style="padding: 11px 12px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                <div style="display: flex; flex-direction: column; gap: 4px;">
+                    <span id="aw-mode-title-badge" style="width: fit-content; padding: 2px 8px; border-radius: 6px; font-size: 12px; font-weight: 600; background: ${running ? 'rgba(16, 185, 129, 0.15)' : 'rgba(244, 63, 94, 0.15)'}; border: 1px solid ${running ? 'rgba(16, 185, 129, 0.3)' : 'rgba(244, 63, 94, 0.3)'}; color: ${running ? '#34d399' : '#f43f5e'};">
+                        ${running ? 'Auto Kerja: AKTIF' : 'Auto Kerja: DIJEDA'}
+                    </span>
+                    <div style="font-size: 11.5px; color: #94a3b8; display: flex; align-items: center; gap: 4px; margin-top: 2px;">
+                        <span>Target Ambang:</span>
+                        <span class="tabular-nums" style="padding: 1px 6px; border-radius: 4px; background: rgba(56, 189, 248, 0.15); border: 1px solid rgba(56, 189, 248, 0.3); color: #38bdf8; font-weight: 600;">≥ <span id="aw-target-threshold">${CONFIG.energyThreshold || 10}</span> EN</span>
+                    </div>
+                </div>
+                <div class="paw-well" style="padding: 6px 12px; border-radius: 10px; text-align: right;">
+                    <div style="font-size: 11px; color: #94a3b8;">Hitung Mundur</div>
+                    <div id="aw-shift-countdown" class="tabular-nums" style="font-size: 17px; font-weight: 700; color: #ffffff; letter-spacing: -0.02em;">${(isDashboardPage() && !state.hasInitialDomEnergyRead && (!state.currentEnergy || state.currentEnergy <= 0)) ? 'Sinkronisasi...' : getLiveCountdown(state, CONFIG)}</div>
+                </div>
+            </div>
+
+            <!-- 6. Latihan Stats Card -->
+            <div id="aw-training-card" class="paw-card" style="padding: 11px 12px; display: flex; flex-direction: column; gap: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; min-height: 28px;">
+                    <div style="display: flex; align-items: center; gap: 7px;">
+                        <span style="color: #818cf8; display: flex; align-items: center;">${ICONS.dumbbell}</span>
+                        <span style="font-size: 12px; font-weight: 700; letter-spacing: 0.5px; color: #cbd5e1; text-transform: uppercase;">LATIHAN STATS</span>
+                        <span id="aw-train-count-badge" class="tabular-nums" style="font-size: 11px; font-weight: 600; padding: 1.5px 7px; border-radius: 4px; background: rgba(244, 63, 94, 0.15); border: 1px solid rgba(244, 63, 94, 0.3); color: #fda4af;">${CONFIG.autoTrainEnabled ? `${(CONFIG.trainStrengthEnabled !== false ? 1 : 0) + (CONFIG.trainEducationEnabled !== false ? 1 : 0) + (CONFIG.trainEconomyEnabled !== false ? 1 : 0)}/3 Aktif` : 'Nonaktif'}</span>
+                    </div>
+                    <button id="aw-training-toggle-badge" type="button" class="btn-cyber ${CONFIG.autoTrainEnabled ? '' : 'badge-train-off'}" style="
+                        font-size: 11px; font-weight: 700; padding: 3px 10px; border-radius: 999px;
+                        ${CONFIG.autoTrainEnabled ? 'background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);' : ''}
+                        cursor: pointer; display: flex; align-items: center; gap: 5px;
+                    " title="Aktifkan / Sembunyikan Latihan Stats">
+                        <span id="aw-train-badge-dot" style="width: 6px; height: 6px; border-radius: 50%; background: ${CONFIG.autoTrainEnabled ? '#10b981' : '#64748b'}; display: inline-block;"></span>
+                        <span id="aw-train-badge-text">${CONFIG.autoTrainEnabled ? 'AKTIF' : '• OFF'}</span>
+                    </button>
+                </div>
+
+                <!-- Collapsible Training Body -->
+                <div id="aw-training-body" class="${CONFIG.autoTrainEnabled ? 'expanded' : 'collapsed'}">
+                    <!-- 3 Mini Stat Pills (Interactive Click to toggle) -->
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 6px; margin-bottom: 8px;">
+                        <div id="aw-pill-str" class="aw-mini-stat-pill pill-str ${CONFIG.trainStrengthEnabled !== false ? '' : 'dimmed'}" title="Klik untuk toggle latihan STR">
+                            <span class="pill-lbl">STR</span>
+                            <span id="aw-train-str-val" class="stat-val tabular-nums">${state.trainingStats?.strength || '--'}</span>
+                        </div>
+                        <div id="aw-pill-edu" class="aw-mini-stat-pill pill-edu ${CONFIG.trainEducationEnabled !== false ? '' : 'dimmed'}" title="Klik untuk toggle latihan EDU">
+                            <span class="pill-lbl">EDU</span>
+                            <span id="aw-train-edu-val" class="stat-val tabular-nums">${state.trainingStats?.education || '--'}</span>
+                        </div>
+                        <div id="aw-pill-eko" class="aw-mini-stat-pill pill-eko ${CONFIG.trainEconomyEnabled !== false ? '' : 'dimmed'}" title="Klik untuk toggle latihan EKO">
+                            <span class="pill-lbl">EKO</span>
+                            <span id="aw-train-eko-val" class="stat-val tabular-nums">${state.trainingStats?.economy || '--'}</span>
                         </div>
                     </div>
-                    <div style="text-align:right;">
-                        <div id="aw-shift-countdown" style="font-weight:700;color:#38bdf8;font-size:11px;">${getLiveCountdown(state, CONFIG)}</div>
-                        <div style="font-size:9px;color:#718096;">Countdown</div>
+
+                    <!-- Focus Sub-well matching Gambar 2 -->
+                    <div class="paw-well" style="padding: 8px 10px; border-radius: 8px; display: flex; flex-direction: column; gap: 6px;">
+                        <div style="display: flex; align-items: center; justify-content: space-between; font-size: 12px;">
+                            <span id="aw-train-focus-label" style="font-weight: 600; color: #fda4af; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; display: flex; align-items: center; gap: 6px;">
+                                <span id="aw-train-target-icon" style="display: flex; align-items: center; color: #f43f5e; flex-shrink: 0;">${ICONS.target}</span>
+                                <span id="aw-train-focus-text">Fokus: Kekuatan Lv ${CONFIG.targetStrength || 83}</span>
+                            </span>
+                            <span id="aw-train-timer-text" class="tabular-nums" style="font-weight: 700; color: #ffffff; white-space: nowrap;">1j 13m</span>
+                        </div>
+                        <div style="width: 100%; height: 6px; border-radius: 999px; background: rgba(10, 14, 26, 0.95); overflow: hidden;">
+                            <div id="aw-train-progress-bar" class="stat-progress-fill" style="height: 100%; width: 64%; border-radius: 999px; transition: width 0.35s ease;"></div>
+                        </div>
                     </div>
                 </div>
+            </div>
 
-                <!-- Token & Expiry Row -->
-                <div style="font-size:10.5px;color:#718096;margin-bottom:9px;padding:6px 9px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.04);border-radius:6px;display:flex;justify-content:space-between;align-items:center;">
-                    <div style="display:flex;align-items:center;gap:6px;">
-                        <span style="color:#38bdf8;display:flex;align-items:center;">${ICONS.shield}</span>
-                        <span style="color:#a0aec0;">Sesi Auth:</span>
-                        <span id="aw-token-status" style="font-weight:700;color:#00ff88;">VALID</span>
-                    </div>
-                    <span id="aw-token-expiry" style="font-size:10px;color:#718096;">N/A</span>
+            <!-- 7. Sesi Auth Row -->
+            <div class="paw-card" style="padding: 8px 12px; display: flex; justify-content: space-between; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 7px;">
+                    <span style="color: #10b981; display: flex; align-items: center;">${ICONS.shield}</span>
+                    <span style="color: #94a3b8; font-size: 12px;">Sesi Token Auth:</span>
                 </div>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span id="aw-token-status" style="font-weight: 700; color: #34d399; font-size: 11.5px; padding: 1.5px 7px; border-radius: 4px; background: rgba(16, 185, 129, 0.15); border: 1px solid rgba(16, 185, 129, 0.3);">VALID</span>
+                    <span id="aw-token-expiry" class="tabular-nums" style="font-size: 12.5px; color: #e2e8f0; font-weight: 600;">--</span>
+                </div>
+            </div>
 
-                <!-- Action Buttons -->
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;">
-                    <button id="aw-work-now" class="aw-btn-action" style="
-                        background: linear-gradient(135deg, #0284c7 0%, #0369a1 100%);
-                        color: #fff; border: 1px solid rgba(255,255,255,0.15);
-                        padding: 8px 0; border-radius: 7px; cursor: pointer;
-                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(2,132,199,0.25);
-                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.zap} Kerja</span></button>
-                    <button id="aw-toggle" class="aw-btn-action" style="
-                        background: ${running ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
-                        color: #fff; border: 1px solid rgba(255,255,255,0.15);
-                        padding: 8px 0; border-radius: 7px; cursor: pointer;
-                        font-weight: 600; font-size: 11px;
-                        box-shadow: 0 2px 6px ${running ? 'rgba(239,68,68,0.25)' : 'rgba(16,185,129,0.25)'};
-                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${running ? ICONS.pause + ' Jeda' : ICONS.play + ' Lanjut'}</span></button>
-                    <button id="aw-logs" class="aw-btn-action" style="
-                        background: linear-gradient(135deg, #475569 0%, #334155 100%);
-                        color: #fff; border: 1px solid rgba(255,255,255,0.15);
-                        padding: 8px 0; border-radius: 7px; cursor: pointer;
-                        font-weight: 600; font-size: 11px; box-shadow: 0 2px 6px rgba(71,85,105,0.25);
-                    "><span style="display:inline-flex;align-items:center;justify-content:center;gap:4px;">${ICONS.fileText} Log</span></button>
-                </div>
+            <!-- 8. 3 Action Buttons (Gambar 3) -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; padding-top: 2px;">
+                <button id="aw-work-now" class="btn-cyber aw-btn-action" style="
+                    background: linear-gradient(180deg, #0ea5e9 0%, #0284c7 100%);
+                    color: #020617; border: 1px solid rgba(56, 189, 248, 0.5);
+                    padding: 9px 0; border-radius: 12px; cursor: pointer;
+                    font-weight: 700; font-size: 12px; box-shadow: 0 0 14px rgba(56, 189, 248, 0.35);
+                    display: flex; align-items: center; justify-content: center; gap: 6px;
+                ">
+                    ${ICONS.zap}
+                    <span>Kerja</span>
+                </button>
+                <button id="aw-toggle" class="btn-cyber aw-btn-action" style="
+                    background: ${running ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)'};
+                    color: ${running ? '#fda4af' : '#6ee7b7'};
+                    border: 1px solid ${running ? 'rgba(244, 63, 94, 0.45)' : 'rgba(16, 185, 129, 0.45)'};
+                    padding: 9px 0; border-radius: 12px; cursor: pointer;
+                    font-weight: 600; font-size: 12px;
+                    display: flex; align-items: center; justify-content: center; gap: 6px;
+                ">
+                    <span id="aw-toggle-icon" style="display: flex; align-items: center;">${running ? ICONS.pause : ICONS.play}</span>
+                    <span id="aw-toggle-text">${running ? 'Jeda Bot' : 'Lanjutkan'}</span>
+                </button>
+                <button id="aw-logs" class="btn-cyber aw-btn-action" style="
+                    background: rgba(30, 41, 59, 0.9);
+                    color: #e2e8f0; border: 1px solid rgba(255, 255, 255, 0.12);
+                    padding: 9px 0; border-radius: 12px; cursor: pointer;
+                    font-weight: 600; font-size: 12px;
+                    display: flex; align-items: center; justify-content: center; gap: 6px;
+                ">
+                    <span style="display: flex; align-items: center; color: #94a3b8;">${ICONS.terminal}</span>
+                    <span>Log Bot</span>
+                </button>
             </div>
         </div>
 
-        <!-- Mini Floating Pill Container (Mode Ringkas) -->
-        <div id="aw-pill-container" class="aw-pill-box" style="
+        <!-- Mode Ringkas: Floating Pill Capsule (Height: 36px) -->
+        <div id="aw-pill-container" class="paw-shell aw-pill-box" style="
             display: ${isMin ? 'flex' : 'none'};
             align-items: center;
-            gap: 7px;
-            background: linear-gradient(135deg, rgba(20, 25, 42, 0.95) 0%, rgba(13, 16, 26, 0.98) 100%);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            border: 1px solid rgba(255, 255, 255, 0.12);
+            justify-content: space-between;
+            gap: 8px;
+            height: 36px;
+            padding: 0 10px;
             border-radius: 999px;
-            padding: 4px 8px 4px 10px;
-            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.65), 0 0 1px rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            box-shadow: 0 10px 25px rgba(0, 0, 0, 0.65);
             cursor: ${isPinned ? 'default' : 'move'};
-            transition: border-color 0.2s ease, box-shadow 0.2s ease;
             box-sizing: border-box;
             white-space: nowrap;
         " title="Auto Worker • Seret untuk pindah • Klik 2x untuk perbesar">
-
-            <!-- Robot Icon & Live Status Dot -->
-            <div style="display: flex; align-items: center; gap: 5px; flex-shrink: 0;">
+            <div style="display: flex; align-items: center; gap: 7px; flex-shrink: 0;">
                 <span style="color: #38bdf8; display: flex; align-items: center;">${ICONS.robot}</span>
-                <span id="aw-pill-status-dot" style="
-                    width: 7px; height: 7px; border-radius: 50%; display: inline-block; flex-shrink: 0;
-                    background: ${running ? '#00ff88' : '#ff4757'};
-                    box-shadow: 0 0 8px ${running ? '#00ff88' : '#ff4757'};
+                <span id="aw-pill-status-dot" class="${running ? 'status-dot-active' : ''}" style="
+                    width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex-shrink: 0;
+                    background: ${running ? '#10b981' : '#f43f5e'};
                 "></span>
             </div>
 
             <!-- Energy Badge -->
-            <div id="aw-pill-energy-badge" style="
+            <div id="aw-pill-energy-badge" class="tabular-nums" style="
                 display: flex; align-items: center; gap: 4px;
-                background: rgba(0, 255, 136, 0.08);
-                border: 1px solid rgba(0, 255, 136, 0.22);
-                border-radius: 6px;
-                padding: 2px 7px;
-                font-size: 11px;
-                font-weight: 700;
-                color: #00ff88;
-                letter-spacing: 0.2px;
+                background: rgba(56, 189, 248, 0.15);
+                border: 1px solid rgba(56, 189, 248, 0.25);
+                border-radius: 999px;
+                padding: 2px 8px;
+                font-size: 12px;
+                font-weight: 600;
+                color: #7dd3fc;
                 flex-shrink: 0;
             " title="Energi Saat Ini">
-                <span style="display: flex; align-items: center;">${ICONS.zap}</span>
+                <span style="display: flex; align-items: center; color: #38bdf8;">${ICONS.zap}</span>
                 <span id="aw-pill-energy">${state.currentEnergy || 0}/${state.maxEnergy || 110}</span>
             </div>
 
-            <!-- Next Work / Countdown Badge -->
-            <div id="aw-pill-countdown-badge" style="
+            <!-- Countdown Badge -->
+            <div id="aw-pill-countdown-badge" class="tabular-nums" style="
                 display: flex; align-items: center; gap: 4px;
-                background: rgba(56, 189, 248, 0.08);
-                border: 1px solid rgba(56, 189, 248, 0.22);
-                border-radius: 6px;
-                padding: 2px 7px;
-                font-size: 11px;
-                font-weight: 700;
-                color: #38bdf8;
-                letter-spacing: 0.2px;
+                background: rgba(30, 41, 59, 0.9);
+                border: 1px solid rgba(255, 255, 255, 0.1);
+                border-radius: 999px;
+                padding: 2px 8px;
+                font-size: 12px;
+                font-weight: 500;
+                color: #e2e8f0;
                 flex-shrink: 0;
             " title="Countdown Giliran Kerja">
-                <span id="aw-pill-countdown-icon" style="display: flex; align-items: center;">${ICONS.clock}</span>
+                <span id="aw-pill-countdown-icon" style="display: flex; align-items: center; color: #818cf8;">${ICONS.clock}</span>
                 <span id="aw-pill-countdown">Memuat...</span>
             </div>
 
-            <!-- Subtle Divider -->
-            <div style="width: 1px; height: 16px; background: rgba(255, 255, 255, 0.12); flex-shrink: 0; margin: 0 1px;"></div>
-
-            <!-- Mini Quick Actions -->
+            <!-- Mini Actions -->
             <div style="display: flex; align-items: center; gap: 4px; flex-shrink: 0;">
-                <button id="aw-pill-toggle" class="aw-pill-btn" style="
-                    width: 22px; height: 22px; border-radius: 50%; border: none;
-                    background: ${running ? 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)' : 'linear-gradient(135deg, #10b981 0%, #059669 100%)'};
-                    color: #fff; font-size: 9.5px; font-weight: 700;
-                    box-shadow: 0 2px 6px ${running ? 'rgba(239,68,68,0.35)' : 'rgba(16,185,129,0.35)'};
+                <button id="aw-pill-toggle" class="btn-cyber aw-pill-btn" style="
+                    width: 24px; height: 24px; border-radius: 50%;
+                    background: ${running ? 'rgba(244, 63, 94, 0.2)' : 'rgba(16, 185, 129, 0.2)'};
+                    border: 1px solid ${running ? 'rgba(244, 63, 94, 0.4)' : 'rgba(16, 185, 129, 0.4)'};
+                    color: ${running ? '#fda4af' : '#6ee7b7'}; font-size: 9.5px; font-weight: 700;
+                    display: flex; align-items: center; justify-content: center; cursor: pointer;
                 " title="${running ? 'Jeda Worker' : 'Lanjutkan Worker'}">${running ? ICONS.pause : ICONS.play}</button>
 
-                <button id="aw-pill-expand" class="aw-pill-btn" style="
-                    width: 22px; height: 22px; border-radius: 50%;
-                    background: rgba(255, 255, 255, 0.08);
-                    border: 1px solid rgba(255, 255, 255, 0.15);
-                    color: #cbd5e1;
-                " title="Perbesar ke Panel Penuh">${ICONS.expand}</button>
+                <button id="aw-pill-expand" class="btn-cyber aw-pill-btn" style="
+                    width: 24px; height: 24px; border-radius: 50%;
+                    background: rgba(30, 41, 59, 0.9);
+                    border: 1px solid rgba(255, 255, 255, 0.1);
+                    color: #cbd5e1; display: flex; align-items: center; justify-content: center; cursor: pointer;
+                " title="Perbesar ke Mode Penuh">${ICONS.expand}</button>
             </div>
         </div>
     `;
@@ -896,8 +1462,12 @@ function _setupDragAndDrop(panel, state, CONFIG) {
 
     document.addEventListener('mousemove', e => {
         if (!dragging) return;
-        state.panelX = Math.max(0, origX + e.clientX - startX);
-        state.panelY = Math.max(0, origY + e.clientY - startY);
+        const currentWidth = state.panelMinimized ? 280 : 376;
+        const currentHeight = state.panelMinimized ? 40 : 300;
+        const maxX = Math.max(0, window.innerWidth - currentWidth);
+        const maxY = Math.max(0, window.innerHeight - currentHeight);
+        state.panelX = Math.max(0, Math.min(origX + e.clientX - startX, maxX));
+        state.panelY = Math.max(0, Math.min(origY + e.clientY - startY, maxY));
         panel.style.left = state.panelX + 'px';
         panel.style.top  = state.panelY + 'px';
     });
@@ -991,15 +1561,24 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
             return;
         }
         state.running = !state.running;
+        setValue('aw_worker_running', state.running.toString());
         setRunningUI(state.running);
-        ctx.log(state.running ? 'Script dilanjutkan' : 'Script di-pause', 'info');
+        ctx.log(state.running ? 'Auto Worker dilanjutkan' : 'Auto Worker dijeda (Status disimpan)', 'info');
         if (state.running) ctx.wakePendingWork?.();
         saveState(state);
         const summary = saveLiveStatus(state, CONFIG, true);
         ctx.updatePanel?.();
 
         try {
-            chrome.storage.local.set({ aw_live_status: summary });
+            chrome.storage.local.set({
+                aw_live_status: summary,
+                aw_worker_running: state.running.toString()
+            });
+            broadcastTabMessage({
+                type: 'TOGGLE_RUNNING',
+                running: state.running,
+                timestamp: Date.now()
+            });
             chrome.runtime.sendMessage({
                 type: 'POPUP_TO_TAB',
                 action: 'toggleRunning',
@@ -1026,47 +1605,51 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
     });
     logsBtn?.addEventListener('click', () => ctx.openLogViewer?.());
 
-    // Food quota quick adjustment handlers
-    const foodDecBtn = document.getElementById('aw-food-dec');
-    const foodIncBtn = document.getElementById('aw-food-inc');
-    const foodMaxBtn = document.getElementById('aw-food-max');
 
-    function _broadcastFoodUpdate(val) {
-        try {
-            const ch = new BroadcastChannel('aw_parlamentum_tabs');
-            ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: val, timestamp: Date.now() });
-            ch.close();
-        } catch { /* ignore */ }
-    }
 
-    foodDecBtn?.addEventListener('click', (e) => {
+    // Training quick toggle handler
+    const trainBadge = document.getElementById('aw-training-toggle-badge');
+    trainBadge?.addEventListener('click', (e) => {
         e.stopPropagation();
-        state.foodEatenToday = Math.max(0, (state.foodEatenToday || 0) - 1);
-        setValue('aw_foodEatenToday', state.foodEatenToday.toString());
-        saveLiveStatus(state, CONFIG, true);
-        _broadcastFoodUpdate(state.foodEatenToday);
+        CONFIG.autoTrainEnabled = !CONFIG.autoTrainEnabled;
+        ctx.saveConfig?.(CONFIG);
+        ctx.log?.(`Auto Latihan Stats ${CONFIG.autoTrainEnabled ? 'diaktifkan' : 'dinonaktifkan'}.`, 'info');
         ctx.updatePanel?.();
+        if (CONFIG.autoTrainEnabled) {
+            ctx.executeAutoTrain?.();
+        }
     });
 
-    foodIncBtn?.addEventListener('click', (e) => {
+    // Mini stat pills toggle handlers
+    const pillStr = document.getElementById('aw-pill-str');
+    const pillEdu = document.getElementById('aw-pill-edu');
+    const pillEko = document.getElementById('aw-pill-eko');
+
+    pillStr?.addEventListener('click', (e) => {
         e.stopPropagation();
-        const maxFood = CONFIG.maxFoodDaily || state.maxFoodDaily || 10;
-        state.foodEatenToday = Math.min(maxFood, (state.foodEatenToday || 0) + 1);
-        setValue('aw_foodEatenToday', state.foodEatenToday.toString());
-        saveLiveStatus(state, CONFIG, true);
-        _broadcastFoodUpdate(state.foodEatenToday);
+        CONFIG.trainStrengthEnabled = CONFIG.trainStrengthEnabled === false;
+        ctx.saveConfig?.(CONFIG);
+        ctx.log?.(`Target STR ${CONFIG.trainStrengthEnabled ? 'diaktifkan' : 'dilewati'}.`, 'info');
         ctx.updatePanel?.();
+        if (CONFIG.autoTrainEnabled) ctx.executeAutoTrain?.();
     });
 
-    foodMaxBtn?.addEventListener('click', (e) => {
+    pillEdu?.addEventListener('click', (e) => {
         e.stopPropagation();
-        const maxFood = CONFIG.maxFoodDaily || state.maxFoodDaily || 10;
-        state.foodEatenToday = maxFood;
-        setValue('aw_foodEatenToday', maxFood.toString());
-        saveLiveStatus(state, CONFIG, true);
-        _broadcastFoodUpdate(maxFood);
-        ctx.log(`Slot makanan disetel penuh (${maxFood}/${maxFood}). Kuota tercapai.`, 'info');
+        CONFIG.trainEducationEnabled = CONFIG.trainEducationEnabled === false;
+        ctx.saveConfig?.(CONFIG);
+        ctx.log?.(`Target EDU ${CONFIG.trainEducationEnabled ? 'diaktifkan' : 'dilewati'}.`, 'info');
         ctx.updatePanel?.();
+        if (CONFIG.autoTrainEnabled) ctx.executeAutoTrain?.();
+    });
+
+    pillEko?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        CONFIG.trainEconomyEnabled = CONFIG.trainEconomyEnabled === false;
+        ctx.saveConfig?.(CONFIG);
+        ctx.log?.(`Target EKO ${CONFIG.trainEconomyEnabled ? 'diaktifkan' : 'dilewati'}.`, 'info');
+        ctx.updatePanel?.();
+        if (CONFIG.autoTrainEnabled) ctx.executeAutoTrain?.();
     });
 
     confirmBtn?.addEventListener('click', () => {
@@ -1081,6 +1664,8 @@ function _setupPanelControls(panel, state, CONFIG, ctx) {
         const e = getCurrentEnergy();
         if (e) { state.currentEnergy = e.current; state.maxEnergy = e.max; }
         state.running = true;
+        setValue('aw_worker_running', 'true');
+        setRunningUI(true);
         ctx.log('Worker dilanjutkan setelah hasil timeout diperiksa manual.', 'warn');
         ctx.updatePanel?.();
         ctx.wakePendingWork?.();

@@ -5,15 +5,15 @@
  * Vite bundles this + all imports into dist/content.js.
  */
 
-import { initStorage, getValue, setValue, onStorageChanged } from './storage.js';
+import { initStorage, getValue, setValue, onStorageChanged, isExtensionContextValid } from './storage.js';
 import { loadConfig, saveConfig, normalizeConfig }           from './config.js';
 import { createInitialState, saveState, saveLiveStatus, reloadStateFromStorage, getStoredInteger } from './state.js';
 import { loadWorkHistory, saveWorkHistory }                   from './history.js';
-import { log as _log, setLogUpdateCallback }                  from './logger.js';
+import { log as _log, setLogUpdateCallback, clearStoredLogs }                  from './logger.js';
 import { parseJwt, handleNewToken as _handleNewToken, getTokenFromStorage as _getTokenFromStorage,
          getTimeUntilExpiry, startTokenWatcher }              from './token.js';
 import { getSyncedEnergy, getCurrentEnergy, waitForEnergyElement, getPlayerLevel, getMaxEnergyForLevel,
-         getLiveCountdown, getTimeToFullEnergy, getNextWorkDelay, patchPageVisualEnergy, getRegionHealthBonus, getRegionDetails, isDashboardPage, getEffectiveEnergyThreshold, isEnergyFlushActive } from './energy.js';
+         getLiveCountdown, getTimeToFullEnergy, getNextWorkDelay, patchPageVisualEnergy, getRegionHealthBonus, getRegionDetails, invalidateRegionCache, isDashboardPage, getEffectiveEnergyThreshold, isEnergyFlushActive, calculateProjectedEnergy, readBreadQuotaFromDom } from './energy.js';
 import { sendNotification, playNotificationSound, playEnergyFullAlarm, showInPageNotification } from './notifications.js';
 import { doWork }                                             from './work.js';
 import { createPanel, updatePanel as _updatePanel, setRunningUI, updatePanelVisibility } from './ui/panel.js';
@@ -21,6 +21,31 @@ import { createSettingsModal, openSettings }                  from './ui/setting
 import { createLogViewer, openLogViewer, updateLogViewer }    from './ui/logviewer.js';
 import { setupLoginCapture, tryAutoLogin, getSavedCredentials } from './autologin.js';
 import { initInterceptorClient }                              from './interceptor-client.js';
+import { getTabChannel, broadcastTabMessage }                 from './broadcast.js';
+import { autoConfirmTrainingModal, executeAutoTrain, getTrainingConfirmStartButton, handleTrainSuccess, handleTrainRejected, readTrainingStatsFromDom } from './training.js';
+
+/**
+ * Creates an interval that automatically halts and cleans itself up
+ * whenever the browser extension context is invalidated or reloaded.
+ */
+function safeSetInterval(fn, delay) {
+    const timer = setInterval(() => {
+        if (!isExtensionContextValid()) {
+            clearInterval(timer);
+            return;
+        }
+        try {
+            fn();
+        } catch (err) {
+            if (err?.message?.includes('Extension context invalidated')) {
+                clearInterval(timer);
+            } else {
+                console.error('[Interval Error]', err);
+            }
+        }
+    }, delay);
+    return timer;
+}
 
 // ─── Bootstrap ───────────────────────────────────────────────────────────────
 
@@ -59,6 +84,13 @@ import { initInterceptorClient }                              from './intercepto
     // 6. Schema migration (run once per install)
     _runMigrations(state, CONFIG, workHistory);
 
+    // ─── Real-Time Cross-Tab Coordination (BroadcastChannel Singleton) ───────
+    const tabChannel = getTabChannel();
+
+    function safePostTabMessage(msg) {
+        broadcastTabMessage(msg);
+    }
+
     // ─── Bound helpers ────────────────────────────────────────────────────────
 
     const log        = (msg, type, toLog) => _log(state, CONFIG, msg, type, toLog);
@@ -96,8 +128,15 @@ import { initInterceptorClient }                              from './intercepto
         openSettings:      ()            => openSettings(CONFIG, ctx),
         openLogViewer:     ()            => openLogViewer(state, CONFIG),
         saveConfig:        (cfg)         => saveConfig(cfg),
+        saveLiveStatus:    (force = false) => saveLiveStatus(state, CONFIG, force),
+        getCurrentEnergy:  ()            => getCurrentEnergy(),
         reloadStateFromStorage: ()       => reloadStateFromStorage(state, () => { workHistory = loadWorkHistory(state, CONFIG); }),
         patchPageVisualEnergy:  (cur, max, force) => patchPageVisualEnergy(cur, max, force),
+        executeAutoTrain:   ()           => executeAutoTrain(ctx),
+        autoConfirmTrainingModal: ()     => autoConfirmTrainingModal(ctx),
+        handleTrainSuccess: (msg)        => handleTrainSuccess(msg, state, CONFIG, ctx),
+        handleTrainRejected: (msg)       => handleTrainRejected(msg, state, CONFIG, ctx),
+        readBreadQuotaFromDom: ()        => readBreadQuotaFromDom(state, CONFIG, log),
     };
 
     // ─── Main-World Network Interceptor Bridge ─────────────────────────────────
@@ -124,13 +163,11 @@ import { initInterceptorClient }                              from './intercepto
             state.foodEatenToday = 0;
             setValue('aw_foodEatenToday', '0');
             setValue('aw_foodUtcDate', currentUtcDay);
-            try {
-                tabChannel?.postMessage({
-                    type: 'FOOD_UPDATED',
-                    foodEatenToday: 0,
-                    timestamp: Date.now()
-                });
-            } catch { /* ignore */ }
+            safePostTabMessage({
+                type: 'FOOD_UPDATED',
+                foodEatenToday: 0,
+                timestamp: Date.now()
+            });
             log('Reset server 00:00 UTC tercapai. Kuota makanan harian di-reset ke 0.', 'info');
         } else if (!lastFoodUtc) {
             setValue('aw_foodUtcDate', currentUtcDay);
@@ -205,8 +242,8 @@ import { initInterceptorClient }                              from './intercepto
                 resolve();
             };
             wakePendingWork = finish;
-            // Cap single timer sleep to 30s so background tab throttling doesn't freeze the loop for hours
-            const cappedDelay = Math.min(delay, 30000);
+            // Cap single timer sleep to 15s so background tab throttling doesn't freeze the loop for hours
+            const cappedDelay = Math.min(delay, 15000);
             if (bgTimerWorker) { bgTimerWorker.onmessage = finish; bgTimerWorker.postMessage(Math.max(10, cappedDelay)); }
             pendingWorkTimer = setTimeout(finish, cappedDelay);
         });
@@ -237,13 +274,74 @@ import { initInterceptorClient }                              from './intercepto
     state.tabLockManaged = Boolean(navigator?.locks?.request);
     state.isTabLockOwner = !state.tabLockManaged;
 
+    if (!isDashboardPage()) {
+        try {
+            if (isExtensionContextValid()) {
+                chrome.storage?.local?.get?.(['aw_has_dashboard_tab'], d => {
+                    if (typeof d?.aw_has_dashboard_tab === 'boolean') {
+                        state.hasActiveDashboardTab = d.aw_has_dashboard_tab;
+                    }
+                });
+            }
+        } catch { /* context invalidated */ }
+    }
+
     _logStartup(log, CONFIG, state);
+
+    // Pre-seed energy from stored live status & mathematical projection immediately before UI creation
+    const cachedLive = getValue('aw_live_status');
+    if (cachedLive && typeof cachedLive === 'object') {
+        const maxE = cachedLive.maxEnergy || state.maxEnergy || 110;
+        state.maxEnergy = maxE;
+        if (cachedLive.regenRate != null) state.regenRate = cachedLive.regenRate;
+        if (cachedLive.regionHealthBonusPercent != null) state.regionHealthBonusPercent = cachedLive.regionHealthBonusPercent;
+        if (cachedLive.regionName) state.regionName = cachedLive.regionName;
+        if (cachedLive.lastWorkTimestamp) state.lastWorkTimestamp = cachedLive.lastWorkTimestamp;
+
+        if (cachedLive.energySyncBase && typeof cachedLive.energySyncBase.current === 'number') {
+            state.energySyncBase = { ...cachedLive.energySyncBase };
+            const projected = calculateProjectedEnergy(state.energySyncBase, Date.now());
+            if (typeof projected === 'number' && projected > 0) {
+                state.currentEnergy = Math.min(maxE, projected);
+            } else if (typeof cachedLive.currentEnergy === 'number' && cachedLive.currentEnergy > 0) {
+                state.currentEnergy = Math.min(maxE, cachedLive.currentEnergy);
+            }
+        } else if (typeof cachedLive.currentEnergy === 'number' && cachedLive.currentEnergy > 0) {
+            state.currentEnergy = Math.min(maxE, cachedLive.currentEnergy);
+            state.energySyncBase = {
+                current: state.currentEnergy,
+                max: maxE,
+                updatedAt: cachedLive.updatedAt || Date.now(),
+                regenRate: state.regenRate || 1.0
+            };
+        }
+    }
+
+    // Immediate synchronous DOM check: if page DOM is already rendered, read it instantly before panel creation!
+    const immediateEnergy = getCurrentEnergy();
+    if (immediateEnergy) {
+        if (immediateEnergy.current > 0 || state.currentEnergy <= 0 || state.postShiftEnergy === 0) {
+            state.hasInitialDomEnergyRead = true;
+            state.currentEnergy = immediateEnergy.current;
+            state.maxEnergy     = immediateEnergy.max;
+            state.domEnergyStale = false;
+            state.energySyncBase = { current: immediateEnergy.current, max: immediateEnergy.max, updatedAt: Date.now() };
+        }
+    }
 
     getTokenFn();
     createPanel(state, CONFIG, ctx);
+    setRunningUI(state.running);
+    if (!state.running) {
+        log('Auto Worker dalam kondisi DIJEDA (status disimpan dari sesi sebelumnya).', 'warn', false);
+    }
     const cachedLogs = getValue('aw_recent_logs');
     if (Array.isArray(cachedLogs)) {
-        state.logs = [...cachedLogs];
+        state.logs = cachedLogs.filter(l =>
+            l && typeof l.message === 'string' &&
+            !/^Panel v[\d.]+\s+siap!/i.test(l.message) &&
+            !/^Auto Worker v[\d.]+/i.test(l.message)
+        );
     }
     createLogViewer(state, CONFIG);
     createSettingsModal(CONFIG, ctx);
@@ -262,98 +360,100 @@ import { initInterceptorClient }                              from './intercepto
             state.panelVisible = true;
             setValue('panelVisible', 'true');
         }
+        if (isDash) {
+            waitForEnergyElement(5000).then(energy => {
+                if (energy) {
+                    if (energy.current > 0 || state.currentEnergy <= 0 || state.postShiftEnergy === 0) {
+                        state.currentEnergy = energy.current;
+                        state.maxEnergy     = energy.max;
+                        state.domEnergyStale = false;
+                        state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
+                        saveLiveStatus(state, CONFIG);
+                        updatePanel();
+                    }
+                }
+            });
+        }
         getRegionDetails(true);
         updatePanelVisibility(state, CONFIG);
     });
 
-    // Intercept clicks on game's "KERJAKAN SATU GILIRAN" button when energy < 10
-    // Prevents confusing server 400 error toasts ("Not enough energy to produce even one unit")
-    document.addEventListener('click', (e) => {
-        const btn = e.target?.closest?.('button');
-        if (!btn) return;
-        const txt = (btn.textContent || '').trim();
-        if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(txt)) {
-            if (state.currentEnergy != null && state.currentEnergy < 10) {
-                e.preventDefault();
-                e.stopPropagation();
-                log(`Energi saat ini ${state.currentEnergy}/${state.maxEnergy} EN (butuh minimal 10 EN). Menunggu energi pulih.`, 'warn');
-                showInPageNotification(`Energi belum cukup (${state.currentEnergy}/${state.maxEnergy} EN). Butuh minimal 10 EN untuk giliran kerja.`, 'warn');
-            }
-        }
-    }, true);
+    // Asynchronous DOM observer for React SPA hydration on Dashboard — wait for element if not yet rendered
 
-    // Pre-seed energy from stored live status immediately while React SPA initializes (no phantom time additions)
-    const cachedLive = getValue('aw_live_status');
-    if (cachedLive && cachedLive.currentEnergy != null) {
-        const maxE = cachedLive.maxEnergy || state.maxEnergy || 110;
-        state.maxEnergy = maxE;
-        state.currentEnergy = Math.min(maxE, cachedLive.currentEnergy);
-        state.energySyncBase = { current: state.currentEnergy, max: maxE, updatedAt: cachedLive.updatedAt || Date.now() };
+    // Pre-seed energy from DOM on Dashboard — wait for React SPA to render the element (up to 15s)
+    if (isDashboardPage()) {
+        waitForEnergyElement(15000).then(energy => {
+            if (energy) {
+                if (energy.current > 0 || state.currentEnergy <= 0 || state.postShiftEnergy === 0) {
+                    state.hasInitialDomEnergyRead = true;
+                    state.currentEnergy = energy.current;
+                    state.maxEnergy     = energy.max;
+                    state.domEnergyStale = false;
+                    state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
+
+                    const regDetails = getRegionDetails(true);
+                    const healthBuff = regDetails.bonusMultiplier || 1.0;
+                    state.regenRate = healthBuff;
+                    state.regionHealthBonusPercent = regDetails.bonusPercent || 0;
+                    if (state.regionHealthBonusPercent > 0 || healthBuff > 1.0) {
+                        const bonusPct = state.regionHealthBonusPercent || Math.round((healthBuff - 1.0) * 100);
+                        log(`Buff Kota: Kesehatan +${bonusPct}% pemulihan energi pasif (${healthBuff}x / mnt)`, 'info', false);
+                    }
+
+                    log(`Energi terbaca: ${state.currentEnergy}/${state.maxEnergy}`, 'info', false);
+                    saveLiveStatus(state, CONFIG, true);
+                    updatePanel();
+                }
+            } else {
+                state.hasInitialDomEnergyRead = true;
+                log('Elemen energi tidak ditemukan dalam 15 detik. Energi akan terbaca saat panel update.', 'warn');
+            }
+        });
+    } else {
+        // Non-dashboard page: derive current energy from synchronized base time immediately
+        state.hasInitialDomEnergyRead = true;
+        const synced = getSyncedEnergy(state);
+        if (synced) {
+            state.currentEnergy = synced.current;
+            state.maxEnergy = synced.max;
+        }
+        updatePanel();
     }
 
-    // Pre-seed energy from DOM — wait for React SPA to render the element (up to 15s)
-    waitForEnergyElement(15000).then(energy => {
-        if (energy) {
-            const isDash = isDashboardPage();
-            const storedLive = getValue('aw_live_status');
-            const hasFresherStorage = !isDash && storedLive && storedLive.currentEnergy != null && (
-                storedLive.currentEnergy > energy.current ||
-                (storedLive.updatedAt && Date.now() - storedLive.updatedAt < 300000)
-            );
-
-            if (hasFresherStorage) {
-                state.currentEnergy = storedLive.currentEnergy;
-                state.maxEnergy = storedLive.maxEnergy || energy.max;
-                state.energySyncBase = {
-                    current: storedLive.currentEnergy,
-                    max: state.maxEnergy,
-                    updatedAt: storedLive.updatedAt || Date.now()
-                };
-            } else {
-                state.currentEnergy = energy.current;
-                state.maxEnergy     = energy.max;
-                state.domEnergyStale = false;
-                state.lastWorkTimestamp = 0;
-                state.energySyncBase = { current: energy.current, max: energy.max, updatedAt: Date.now() };
-            }
-
-            const regDetails = getRegionDetails(true);
-            const healthBuff = regDetails.bonusMultiplier || 1.0;
-            state.regenRate = healthBuff;
-            state.regionHealthBonusPercent = regDetails.bonusPercent || 0;
-            if (state.regionHealthBonusPercent > 0 || healthBuff > 1.0) {
-                const bonusPct = state.regionHealthBonusPercent || Math.round((healthBuff - 1.0) * 100);
-                log(`Buff Kota: Kesehatan +${bonusPct}% pemulihan energi pasif (${healthBuff}x / mnt)`, 'info');
-            }
-
-            log(`Energi terbaca: ${state.currentEnergy}/${state.maxEnergy}`, 'info');
-            if (isDash) {
-                saveLiveStatus(state, CONFIG);
-            }
-            updatePanel();
-        } else {
-            log('Elemen energi tidak ditemukan dalam 15 detik. Energi akan terbaca saat panel update.', 'warn');
+    safeSetInterval(() => { if (state.running) _checkAndRefreshToken(state, CONFIG, log, ctx); }, Math.min(CONFIG.tokenRefreshInterval, 60000));
+    safeSetInterval(checkDailyReset, 60000);
+    safeSetInterval(() => {
+        if (isDashboardPage()) {
+            readBreadQuotaFromDom(state, CONFIG, log);
         }
-    });
-
-    setInterval(() => { if (state.running) _checkAndRefreshToken(state, CONFIG, log, ctx); }, Math.min(CONFIG.tokenRefreshInterval, 60000));
-    setInterval(checkDailyReset, 60000);
-    setInterval(updatePanel, 1000);
-    setInterval(reconcileUncertainWork, 10000);
+        updatePanel();
+        if (CONFIG.autoTrainEnabled) {
+            autoConfirmTrainingModal(ctx);
+        }
+    }, 1000);
+    safeSetInterval(reconcileUncertainWork, 10000);
+    safeSetInterval(() => {
+        if (CONFIG.autoTrainEnabled) {
+            autoConfirmTrainingModal(ctx);
+            executeAutoTrain(ctx);
+        }
+    }, 3500);
     setupDomToastObserver();
+    setupTrainingModalObserver();
+    if (isDashboardPage()) {
+        readBreadQuotaFromDom(state, CONFIG, log);
+    }
+    if (CONFIG.autoTrainEnabled) {
+        autoConfirmTrainingModal(ctx);
+    }
 
-    // ─── Real-Time Cross-Tab Coordination (BroadcastChannel) ─────────────────
-    let tabChannel = null;
-    try {
-        tabChannel = new BroadcastChannel('aw_parlamentum_tabs');
-    } catch { tabChannel = null; }
-
+    // ─── Real-Time Cross-Tab Coordination Setup ──────────────────────────────
     const isCurrentTabDashboard = isDashboardPage();
 
     if (tabChannel) {
         if (isCurrentTabDashboard) {
             // Dashboard tab claims master leadership across all open tabs
-            tabChannel.postMessage({
+            safePostTabMessage({
                 type: 'CLAIM_LEADERSHIP_FOR_DASHBOARD',
                 timestamp: Date.now()
             });
@@ -363,20 +463,61 @@ import { initInterceptorClient }                              from './intercepto
             const msg = event?.data;
             if (!msg || typeof msg !== 'object') return;
 
-            // 1. Dashboard heartbeat received by non-dashboard tabs (e.g. /pasar)
+            // Training update across tabs
+            if (msg.type === 'TRAIN_UPDATED') {
+                if (msg.activeTraining !== undefined) state.activeTraining = msg.activeTraining;
+                if (msg.walletGold != null) state.walletGold = msg.walletGold;
+                updatePanel();
+            }
+
+            // 0. Work shift completed in one tab -> immediately sync all tabs
+            if (msg.type === 'WORK_SHIFT_COMPLETED') {
+                if (!isDashboardPage() || !state.isTabLockOwner) {
+                    state.domEnergyStale = true;
+                    if (msg.currentEnergy != null) {
+                        state.currentEnergy = msg.currentEnergy;
+                        state.postShiftEnergy = msg.currentEnergy;
+                        state.maxEnergy = msg.maxEnergy || state.maxEnergy;
+                        state.energySyncBase = msg.energySyncBase ? { ...msg.energySyncBase } : {
+                            current: msg.currentEnergy,
+                            max: state.maxEnergy,
+                            updatedAt: msg.timestamp || Date.now(),
+                            regenRate: state.regenRate || 1.0
+                        };
+                    }
+                    if (msg.workToday != null) state.workToday = msg.workToday;
+                    if (msg.xpToday != null) state.xpToday = msg.xpToday;
+                    if (msg.totalWorked != null) state.totalWorked = msg.totalWorked;
+                    if (msg.totalWorkXP != null) state.totalWorkXP = msg.totalWorkXP;
+                    if (msg.lastWorkTime) state.lastWorkTime = msg.lastWorkTime;
+                    if (msg.lastWorkTimestamp != null) state.lastWorkTimestamp = msg.lastWorkTimestamp;
+                    if (msg.nextWorkTimestamp != null) state.nextWorkTimestamp = msg.nextWorkTimestamp;
+                    if (msg.serverCooldownUntil != null) state.serverCooldownUntil = msg.serverCooldownUntil;
+                    updatePanel();
+                }
+            }
+
+            // 1. Dashboard heartbeat received by non-dashboard tabs (e.g. /pasar, /map)
             if (msg.type === 'DASHBOARD_HEARTBEAT') {
                 state.hasActiveDashboardTab = true;
                 state.lastDashboardHeartbeat = Date.now();
+
+                // Non-dashboard tab holding the lock must yield immediately to dashboard!
+                if (!isDashboardPage() && state.isTabLockOwner) {
+                    state.shouldYieldLock = true;
+                    wakePendingWork?.();
+                }
 
                 // Non-dashboard tabs synchronize ground-truth state instantly with zero lag
                 if (!isDashboardPage()) {
                     if (msg.currentEnergy != null) {
                         state.currentEnergy = msg.currentEnergy;
                         state.maxEnergy = msg.maxEnergy || state.maxEnergy;
-                        state.energySyncBase = {
+                        state.energySyncBase = msg.energySyncBase ? { ...msg.energySyncBase } : {
                             current: msg.currentEnergy,
                             max: state.maxEnergy,
-                            updatedAt: msg.timestamp || Date.now()
+                            updatedAt: msg.timestamp || Date.now(),
+                            regenRate: msg.regenRate || state.regenRate || 1.0
                         };
                     }
                     if (msg.regenRate != null) state.regenRate = msg.regenRate;
@@ -393,9 +534,11 @@ import { initInterceptorClient }                              from './intercepto
                     if (msg.maxFoodDaily != null && msg.maxFoodDaily !== CONFIG.maxFoodDaily) {
                         CONFIG.maxFoodDaily = msg.maxFoodDaily;
                     }
+                    if (msg.trainingStats) state.trainingStats = { ...msg.trainingStats };
+                    if (msg.activeTraining !== undefined) state.activeTraining = msg.activeTraining;
+                    if (msg.walletGold != null) state.walletGold = msg.walletGold;
 
                     updatePanel();
-                    patchPageVisualEnergy(state.currentEnergy, state.maxEnergy);
                 }
             }
 
@@ -406,6 +549,17 @@ import { initInterceptorClient }                              from './intercepto
                     setValue('aw_foodEatenToday', state.foodEatenToday.toString());
                     saveLiveStatus(state, CONFIG, true);
                     updatePanel();
+                }
+            }
+
+            // 1.6. Real-time instant toggle pause/resume across all open tabs
+            if (msg.type === 'TOGGLE_RUNNING' && typeof msg.running === 'boolean') {
+                if (state.running !== msg.running) {
+                    state.running = msg.running;
+                    setValue('aw_worker_running', msg.running.toString());
+                    setRunningUI(state.running);
+                    updatePanel();
+                    if (state.running) wakePendingWork?.();
                 }
             }
 
@@ -428,35 +582,46 @@ import { initInterceptorClient }                              from './intercepto
             }
         };
 
-        // If this tab is on /dashboard, broadcast heartbeat every 2 seconds to keep other tabs synced
-        if (isCurrentTabDashboard) {
-            setInterval(() => {
-                if (tabChannel && isDashboardPage() && state.currentEnergy != null) {
-                    tabChannel.postMessage({
-                        type: 'DASHBOARD_HEARTBEAT',
-                        currentEnergy: state.currentEnergy,
-                        maxEnergy: state.maxEnergy,
-                        regenRate: state.regenRate,
-                        workToday: state.workToday,
-                        xpToday: state.xpToday,
-                        totalWorked: state.totalWorked,
-                        totalWorkXP: state.totalWorkXP,
-                        lastWorkTime: state.lastWorkTime,
-                        nextWorkTimestamp: state.nextWorkTimestamp,
-                        foodEatenToday: state.foodEatenToday,
-                        maxFoodDaily: CONFIG.maxFoodDaily || 10,
-                        timestamp: Date.now()
+        // Broadcast heartbeat every 2 seconds if currently on /dashboard and owning lock to keep other tabs synced
+        safeSetInterval(() => {
+            if (tabChannel && isDashboardPage() && state.isTabLockOwner && state.currentEnergy != null) {
+                safePostTabMessage({
+                    type: 'DASHBOARD_HEARTBEAT',
+                    currentEnergy: state.currentEnergy,
+                    maxEnergy: state.maxEnergy,
+                    energySyncBase: state.energySyncBase,
+                    regenRate: state.regenRate,
+                    workToday: state.workToday,
+                    xpToday: state.xpToday,
+                    totalWorked: state.totalWorked,
+                    totalWorkXP: state.totalWorkXP,
+                    lastWorkTime: state.lastWorkTime,
+                    nextWorkTimestamp: state.nextWorkTimestamp,
+                    foodEatenToday: state.foodEatenToday,
+                    maxFoodDaily: CONFIG.maxFoodDaily || 10,
+                    trainingStats: state.trainingStats,
+                    activeTraining: state.activeTraining,
+                    walletGold: state.walletGold,
+                    timestamp: Date.now()
+                });
+            }
+        }, 2000);
+
+        // On non-dashboard tabs, check if dashboard tab is still alive via storage and heartbeat
+        safeSetInterval(() => {
+            if (!isDashboardPage()) {
+                if (!isExtensionContextValid()) return;
+                try {
+                    chrome.storage?.local?.get?.(['aw_has_dashboard_tab'], d => {
+                        if (typeof d?.aw_has_dashboard_tab === 'boolean') {
+                            state.hasActiveDashboardTab = d.aw_has_dashboard_tab;
+                        } else if (state.lastDashboardHeartbeat && Date.now() - state.lastDashboardHeartbeat > 25000) {
+                            state.hasActiveDashboardTab = false;
+                        }
                     });
-                }
-            }, 2000);
-        } else {
-            // On non-dashboard tabs, check if dashboard tab is still alive every 4 seconds
-            setInterval(() => {
-                if (state.lastDashboardHeartbeat && Date.now() - state.lastDashboardHeartbeat > 7000) {
-                    state.hasActiveDashboardTab = false;
-                }
-            }, 4000);
-        }
+                } catch { /* context invalidated */ }
+            }
+        }, 4000);
     }
 
     // ── Chrome Extension Runtime Message Listener (Popup & Background) ────
@@ -466,12 +631,19 @@ import { initInterceptorClient }                              from './intercepto
                 if (msg.action === 'toggleRunning') {
                     const newRunning = msg.value != null ? Boolean(msg.value) : !state.running;
                     state.running = newRunning;
+                    setValue('aw_worker_running', newRunning.toString());
+                    safePostTabMessage({ type: 'TOGGLE_RUNNING', running: newRunning });
                     setRunningUI(newRunning);
                     updatePanel();
                     saveLiveStatus(state, CONFIG, true);
                     log(`Auto Worker ${newRunning ? 'dilanjutkan' : 'dijeda'} via Popup toolbar.`, 'info');
                     if (newRunning) wakePendingWork?.();
                     sendResponse({ ok: true, running: state.running });
+                    return true;
+                }
+                if (msg.action === 'openSettings') {
+                    openSettings(CONFIG, ctx);
+                    sendResponse({ ok: true });
                     return true;
                 }
                 if (msg.action === 'workNow') {
@@ -498,12 +670,19 @@ import { initInterceptorClient }                              from './intercepto
                     return true;
                 }
                 if (msg.action === 'getStatus') {
-                    const synced = getSyncedEnergy(state);
-                    if (synced) {
-                        state.currentEnergy = synced.current;
-                        state.maxEnergy     = synced.max;
+                    const isDash = isDashboardPage();
+                    if (isDash) {
+                        const synced = getSyncedEnergy(state);
+                        if (synced) {
+                            state.currentEnergy = synced.current;
+                            state.maxEnergy     = synced.max;
+                        }
+                        const shouldForce = state.hasInitialDomEnergyRead || state.currentEnergy > 0 || state.postShiftEnergy === 0;
+                        sendResponse({ ok: true, status: saveLiveStatus(state, CONFIG, shouldForce) });
+                    } else {
+                        // Non-dashboard tabs must NEVER force unverified energy projection into storage
+                        sendResponse({ ok: true, status: saveLiveStatus(state, CONFIG, false) });
                     }
-                    sendResponse({ ok: true, status: saveLiveStatus(state, CONFIG, true) });
                     return true;
                 }
                 if (msg.action === 'getLogs') {
@@ -523,17 +702,22 @@ import { initInterceptorClient }                              from './intercepto
                     state.foodEatenToday = newFood;
                     setValue('aw_foodEatenToday', newFood.toString());
                     saveLiveStatus(state, CONFIG, true);
-                    try {
-                        tabChannel?.postMessage({
-                            type: 'FOOD_UPDATED',
-                            foodEatenToday: newFood,
-                            timestamp: Date.now()
-                        });
-                    } catch { /* ignore */ }
+                    safePostTabMessage({
+                        type: 'FOOD_UPDATED',
+                        foodEatenToday: newFood,
+                        timestamp: Date.now()
+                    });
                     updatePanel();
                     sendResponse({ ok: true, foodEatenToday: newFood });
                     return true;
                 }
+            }
+            if (msg?.type === 'CONFIG_UPDATED' && msg.config) {
+                Object.assign(CONFIG, msg.config);
+                updatePanel();
+                if (CONFIG.autoTrainEnabled) executeAutoTrain(ctx);
+                sendResponse({ ok: true });
+                return true;
             }
             if (msg?.type === 'STORAGE_SYNC' && msg.action === 'backgroundWorkDone') {
                 if (msg.energy != null) {
@@ -592,7 +776,8 @@ import { initInterceptorClient }                              from './intercepto
                             state.maxEnergy = synced.max;
                         }
 
-                        if (!msg.manual && state.currentEnergy < CONFIG.energyThreshold) {
+                        const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
+                        if (!msg.manual && state.currentEnergy < effectiveThreshold) {
                             sendResponse({ ok: true, result: 'waiting', energy: state.currentEnergy });
                             return;
                         }
@@ -622,20 +807,25 @@ import { initInterceptorClient }                              from './intercepto
                             if (latestLive.lastWorkTimestamp && latestLive.lastWorkTimestamp > (state.lastWorkTimestamp || 0)) {
                                 state.lastWorkTimestamp = latestLive.lastWorkTimestamp;
                                 state.currentEnergy = latestLive.currentEnergy;
-                                state.postShiftEnergy = latestLive.currentEnergy;
                                 state.domEnergyStale = true;
-                                state.energySyncBase = {
-                                    current: latestLive.currentEnergy,
-                                    max: latestLive.maxEnergy || state.maxEnergy || 115,
-                                    updatedAt: latestLive.updatedAt || latestLive.lastWorkTimestamp
-                                };
+                                if (latestLive.energySyncBase) {
+                                    state.energySyncBase = { ...latestLive.energySyncBase };
+                                }
                             }
+                            if (latestLive.regenRate != null) state.regenRate = latestLive.regenRate;
+                            if (latestLive.regionHealthBonusPercent != null) state.regionHealthBonusPercent = latestLive.regionHealthBonusPercent;
+                            if (latestLive.regionName) state.regionName = latestLive.regionName;
                             if (latestLive.nextWorkTimestamp) state.nextWorkTimestamp = latestLive.nextWorkTimestamp;
                             if (latestLive.workToday != null) state.workToday = latestLive.workToday;
                             if (latestLive.xpToday != null) state.xpToday = latestLive.xpToday;
                             if (latestLive.totalWorked != null) state.totalWorked = latestLive.totalWorked;
                             if (latestLive.totalWorkXP != null) state.totalWorkXP = latestLive.totalWorkXP;
+                            if (latestLive.serverCooldownUntil != null) state.serverCooldownUntil = latestLive.serverCooldownUntil;
                         }
+
+                        // Multi-tab check: only the active tab lock owner executes work to eliminate duplicate shifts
+                        const isDash = isDashboardPage();
+                        const canExecuteInTab = state.tabLockManaged ? state.isTabLockOwner : (isDash || !state.hasActiveDashboardTab);
 
                         if (state.running) {
                             const energy = getSyncedEnergy(state);
@@ -644,16 +834,36 @@ import { initInterceptorClient }                              from './intercepto
                                 state.maxEnergy = energy.max;
                             }
                             const hasRecentWork = state.lastWorkTimestamp && (Date.now() - state.lastWorkTimestamp < 30000);
-                            const isReadyToWork = state.currentEnergy >= CONFIG.energyThreshold;
-                            if (state.isTabLockOwner && isReadyToWork && !hasRecentWork && !state.workInFlight && !state.workResultUncertain) {
+                            const isCooldownActive = Boolean(state.serverCooldownUntil && Date.now() < state.serverCooldownUntil);
+                            const isWaitingNextWork = Boolean(state.nextWorkTimestamp && Date.now() < state.nextWorkTimestamp);
+                            const isMicroBreakActive = Boolean(state.microBreakUntil && Date.now() < state.microBreakUntil);
+                            const isBackoffActive = Boolean(state.backoffUntil && Date.now() < state.backoffUntil);
+                            const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
+                            const isReadyToWork = state.currentEnergy >= effectiveThreshold && !isCooldownActive && !isWaitingNextWork && !isMicroBreakActive && !isBackoffActive;
+                            if (state.workInFlight && Date.now() - (state.workInFlightAt || 0) > 15000) {
+                                state.workInFlight = false;
+                            }
+
+                            // Check atomic mutex
+                            const rawMutex = getValue('aw_work_mutex');
+                            const mutexActive = rawMutex && Date.now() < Number(rawMutex);
+
+                            if (canExecuteInTab && isReadyToWork && !hasRecentWork && !state.workInFlight && !state.workResultUncertain && !mutexActive) {
+                                setValue('aw_work_mutex', (Date.now() + 20000).toString());
                                 log('Background wake: Energi target tercapai, mengeksekusi shift kerja...', 'info');
-                                const result = await doWork({ ...ctx }, false);
-                                saveLiveStatus(state, CONFIG);
+                                let result = 'retry';
+                                try {
+                                    result = await doWork({ ...ctx }, false);
+                                } finally {
+                                    setValue('aw_work_mutex', '0');
+                                }
+                                saveLiveStatus(state, CONFIG, true);
                                 updatePanel();
                                 sendResponse({
                                     handled: true,
-                                    isLockOwner: true,
+                                    isLockOwner: Boolean(state.isTabLockOwner),
                                     energy: state.currentEnergy,
+                                    energySyncBase: state.energySyncBase,
                                     worked: result === 'worked',
                                     result
                                 });
@@ -661,11 +871,14 @@ import { initInterceptorClient }                              from './intercepto
                             }
                         }
                         updatePanel();
-                        saveLiveStatus(state, CONFIG);
+                        if (isDash || !state.hasActiveDashboardTab) {
+                            saveLiveStatus(state, CONFIG);
+                        }
                         sendResponse({
                             handled: true,
                             isLockOwner: Boolean(state.isTabLockOwner),
                             energy: state.currentEnergy,
+                            energySyncBase: state.energySyncBase,
                             worked: false
                         });
                     } catch (err) {
@@ -678,30 +891,70 @@ import { initInterceptorClient }                              from './intercepto
     } catch { /* ignore if chrome.runtime is unavailable */ }
 
     onStorageChanged((key, newValue) => {
+        if (key === 'aw_has_dashboard_tab' && typeof newValue === 'boolean') {
+            state.hasActiveDashboardTab = newValue;
+            if (!isDashboardPage() && state.hasActiveDashboardTab && state.isTabLockOwner) {
+                state.shouldYieldLock = true;
+                wakePendingWork?.();
+            }
+        }
         if (key === 'aw_live_status' && newValue) {
             const isBackgroundShift = Boolean(
-                newValue.lastWorkTime &&
-                newValue.lastWorkTime !== state.lastWorkTime &&
-                (newValue.totalWorked || 0) > (state.totalWorked || 0)
+                (newValue.lastWorkTimestamp && newValue.lastWorkTimestamp > (state.lastWorkTimestamp || 0)) ||
+                (newValue.lastWorkTime && newValue.lastWorkTime !== state.lastWorkTime && (newValue.totalWorked || 0) > (state.totalWorked || 0))
             );
 
-            // Follower tabs or non-dashboard tabs always synchronize state from leader
-            if (!state.isTabLockOwner || !isDashboardPage() || isBackgroundShift) {
+            if (newValue.serverCooldownUntil != null) {
+                state.serverCooldownUntil = newValue.serverCooldownUntil;
+            }
+
+            const isHidden = typeof document !== 'undefined' && document.hidden;
+            // Follower tabs, non-dashboard tabs, background shifts, or hidden background tabs always synchronize state from leader
+            if (!state.isTabLockOwner || !isDashboardPage() || isBackgroundShift || isHidden) {
                 if (newValue.workToday != null) state.workToday = newValue.workToday;
                 if (newValue.xpToday != null) state.xpToday = newValue.xpToday;
                 if (newValue.totalWorked != null) state.totalWorked = newValue.totalWorked;
                 if (newValue.totalWorkXP != null) state.totalWorkXP = newValue.totalWorkXP;
                 if (newValue.lastWorkTime) state.lastWorkTime = newValue.lastWorkTime;
                 if (newValue.nextWorkTimestamp != null) state.nextWorkTimestamp = newValue.nextWorkTimestamp;
-                if (newValue.currentEnergy != null) {
-                    state.currentEnergy = newValue.currentEnergy;
-                    state.lastWorkTimestamp = newValue.updatedAt || Date.now();
+                if (newValue.lastWorkTimestamp && newValue.lastWorkTimestamp > (state.lastWorkTimestamp || 0)) {
+                    state.lastWorkTimestamp = newValue.lastWorkTimestamp;
+                }
+                if (newValue.regenRate != null) {
+                    state.regenRate = newValue.regenRate;
+                }
+                if (newValue.regionHealthBonusPercent != null) {
+                    state.regionHealthBonusPercent = newValue.regionHealthBonusPercent;
+                }
+                if (newValue.regionName) {
+                    state.regionName = newValue.regionName;
+                }
+
+                // Synchronize energySyncBase ONLY if newer ground truth anchor exists
+                if (newValue.energySyncBase && typeof newValue.energySyncBase.current === 'number') {
+                    const newAnchorTime = newValue.energySyncBase.updatedAt || 0;
+                    const curAnchorTime = state.energySyncBase?.updatedAt || 0;
+                    if (newAnchorTime > curAnchorTime || !state.energySyncBase) {
+                        state.energySyncBase = {
+                            current: newValue.energySyncBase.current,
+                            max: newValue.energySyncBase.max || newValue.maxEnergy || state.maxEnergy || 115,
+                            updatedAt: newAnchorTime || Date.now(),
+                            regenRate: newValue.energySyncBase.regenRate || newValue.regenRate || state.regenRate || 1.0
+                        };
+                    } else if (newValue.energySyncBase.regenRate && state.energySyncBase.regenRate !== newValue.energySyncBase.regenRate) {
+                        state.energySyncBase.regenRate = newValue.energySyncBase.regenRate;
+                    }
+                } else if (newValue.currentEnergy != null && !state.energySyncBase) {
                     state.energySyncBase = {
                         current: newValue.currentEnergy,
-                        max: newValue.maxEnergy || state.maxEnergy || 110,
-                        updatedAt: newValue.updatedAt || Date.now()
+                        max: newValue.maxEnergy || state.maxEnergy || 115,
+                        updatedAt: newValue.updatedAt || Date.now(),
+                        regenRate: newValue.regenRate || state.regenRate || 1.0
                     };
                 }
+
+                const currentProj = calculateProjectedEnergy(state.energySyncBase, Date.now());
+                state.currentEnergy = currentProj;
                 if (newValue.maxEnergy != null) state.maxEnergy = newValue.maxEnergy;
             }
             updatePanel();
@@ -741,74 +994,90 @@ import { initInterceptorClient }                              from './intercepto
     }
 
     function _handleBeforeUnload() {
-        if (tabChannel) {
-            if (isDashboardPage()) {
-                try {
-                    tabChannel.postMessage({
-                        type: 'DASHBOARD_CLOSED',
-                        timestamp: Date.now()
-                    });
-                } catch { /* ignore */ }
-            }
-            try {
-                tabChannel.close();
-            } catch { /* ignore */ }
+        if (isDashboardPage()) {
+            safePostTabMessage({
+                type: 'DASHBOARD_CLOSED',
+                timestamp: Date.now()
+            });
         }
     }
 
+    let _inForegroundReturn = false;
+    let _lastForegroundCheck = 0;
+
     function _handleForegroundReturn() {
-        if (!chrome.runtime?.id) return;
+        if (!isExtensionContextValid()) return;
         if (document.visibilityState === 'hidden') return;
-        state.lastForegroundReturnTime = Date.now();
-        updatePanelVisibility(state, CONFIG);
-        patchPageVisualEnergy(state.currentEnergy, state.maxEnergy, true);
-        saveLiveStatus(state, CONFIG);
+        const now = Date.now();
+        if (now - _lastForegroundCheck < 500 || _inForegroundReturn) return;
+        _lastForegroundCheck = now;
+        _inForegroundReturn = true;
 
-        chrome.storage.local.get(['aw_live_status'], data => {
-            const live = data?.aw_live_status;
-            if (live) {
-                const isNewerShift = Boolean(
-                    live.lastWorkTime &&
-                    live.lastWorkTime !== state.lastWorkTime &&
-                    (live.totalWorked || 0) > (state.totalWorked || 0)
-                );
-                if (isNewerShift) {
-                    if (live.currentEnergy != null) {
-                        state.currentEnergy = live.currentEnergy;
-                        state.lastWorkTimestamp = live.updatedAt || Date.now();
-                        state.domEnergyStale = true;
-                        state.energySyncBase = {
-                            current: live.currentEnergy,
-                            max: live.maxEnergy || state.maxEnergy || 110,
-                            updatedAt: live.updatedAt || Date.now()
-                        };
-                    }
-                    if (live.workToday != null) state.workToday = live.workToday;
-                    if (live.xpToday != null) state.xpToday = live.xpToday;
-                    if (live.totalWorked != null) state.totalWorked = live.totalWorked;
-                    if (live.totalWorkXP != null) state.totalWorkXP = live.totalWorkXP;
-                    if (live.lastWorkTime) state.lastWorkTime = live.lastWorkTime;
-                    if (live.nextWorkTimestamp != null) state.nextWorkTimestamp = live.nextWorkTimestamp;
-                }
-            }
-
-            reloadStateFromStorage(state, () => { workHistory = loadWorkHistory(state, CONFIG); });
-
-            const synced = getSyncedEnergy(state);
-            if (synced) {
-                state.currentEnergy = synced.current;
-                state.maxEnergy = synced.max;
-                if (state.domEnergyStale) {
-                    patchPageVisualEnergy(synced.current, synced.max, true);
-                }
-            }
-
-            updatePanel();
+        try {
+            state.lastForegroundReturnTime = now;
             updatePanelVisibility(state, CONFIG);
-            if (state.running && state.isTabLockOwner && state.currentEnergy >= getEffectiveEnergyThreshold(state, CONFIG)) {
-                wakePendingWork?.();
+
+            if (!isExtensionContextValid()) {
+                _inForegroundReturn = false;
+                return;
             }
-        });
+
+            chrome.storage.local.get(['aw_live_status', 'aw_has_dashboard_tab'], data => {
+                try {
+                    if (typeof data?.aw_has_dashboard_tab === 'boolean' && !isDashboardPage()) {
+                        state.hasActiveDashboardTab = data.aw_has_dashboard_tab;
+                    }
+
+                    const live = data?.aw_live_status;
+                    if (live) {
+                        const isNewerShift = Boolean(
+                            (live.lastWorkTimestamp && live.lastWorkTimestamp > (state.lastWorkTimestamp || 0)) ||
+                            (live.lastWorkTime && live.lastWorkTime !== state.lastWorkTime && (live.totalWorked || 0) > (state.totalWorked || 0))
+                        );
+                        if (isNewerShift) {
+                            if (live.currentEnergy != null) {
+                                state.currentEnergy = live.currentEnergy;
+                                state.lastWorkTimestamp = live.lastWorkTimestamp || 0;
+                                state.domEnergyStale = true;
+                                state.energySyncBase = live.energySyncBase || {
+                                    current: live.currentEnergy,
+                                    max: live.maxEnergy || state.maxEnergy || 110,
+                                    updatedAt: live.updatedAt || Date.now(),
+                                    regenRate: live.regenRate || state.regenRate || 1.0
+                                };
+                            }
+                            if (live.workToday != null) state.workToday = live.workToday;
+                            if (live.xpToday != null) state.xpToday = live.xpToday;
+                            if (live.totalWorked != null) state.totalWorked = live.totalWorked;
+                            if (live.totalWorkXP != null) state.totalWorkXP = live.totalWorkXP;
+                            if (live.lastWorkTime) state.lastWorkTime = live.lastWorkTime;
+                            if (live.nextWorkTimestamp != null) state.nextWorkTimestamp = live.nextWorkTimestamp;
+                            if (live.serverCooldownUntil != null) state.serverCooldownUntil = live.serverCooldownUntil;
+                        }
+                    }
+
+                    reloadStateFromStorage(state, () => { workHistory = loadWorkHistory(state, CONFIG); });
+
+                    const synced = getSyncedEnergy(state);
+                    if (synced) {
+                        state.currentEnergy = synced.current;
+                        state.maxEnergy = synced.max;
+                    }
+
+                    updatePanel();
+                    updatePanelVisibility(state, CONFIG);
+                    saveLiveStatus(state, CONFIG, true);
+
+                    if (state.running && state.isTabLockOwner && (!state.nextWorkTimestamp || Date.now() >= state.nextWorkTimestamp) && (!state.serverCooldownUntil || Date.now() >= state.serverCooldownUntil) && (!state.microBreakUntil || Date.now() >= state.microBreakUntil) && (!state.backoffUntil || Date.now() >= state.backoffUntil) && state.currentEnergy >= getEffectiveEnergyThreshold(state, CONFIG)) {
+                        wakePendingWork?.();
+                    }
+                } finally {
+                    _inForegroundReturn = false;
+                }
+            });
+        } catch {
+            _inForegroundReturn = false;
+        }
     }
 
     let errCount = 0;
@@ -867,13 +1136,11 @@ import { initInterceptorClient }                              from './intercepto
                     state.foodEatenToday = maxFood;
                     setValue('aw_foodEatenToday', maxFood.toString());
                     saveLiveStatus(state, CONFIG, true);
-                    try {
-                        tabChannel?.postMessage({
-                            type: 'FOOD_UPDATED',
-                            foodEatenToday: maxFood,
-                            timestamp: Date.now()
-                        });
-                    } catch { /* ignore */ }
+                    safePostTabMessage({
+                        type: 'FOOD_UPDATED',
+                        foodEatenToday: maxFood,
+                        timestamp: Date.now()
+                    });
                     log(`Notifikasi game: Batas konsumsi roti harian tercapai (${maxFood}/${maxFood}).`, 'info');
                     updatePanel();
                     return;
@@ -885,33 +1152,23 @@ import { initInterceptorClient }                              from './intercepto
     function setupDomToastObserver() {
         scanDomForFoodToast();
 
+        let debounceTimer = null;
         if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
-            const observer = new MutationObserver((mutations) => {
+            const observer = new MutationObserver(() => {
+                if (isDashboardPage()) {
+                    readBreadQuotaFromDom(state, CONFIG, log);
+                }
                 const maxFood = CONFIG.maxFoodDaily || 10;
                 if (state.foodEatenToday >= maxFood) return;
-                for (const m of mutations) {
-                    for (const node of m.addedNodes) {
-                        if (node.nodeType === 1) {
-                            if (node.closest?.('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')) continue;
-                            const txt = node.textContent || '';
-                            if (/batas roti harian tercapai|daily bread limit/i.test(txt)) {
-                                state.foodEatenToday = maxFood;
-                                setValue('aw_foodEatenToday', maxFood.toString());
-                                saveLiveStatus(state, CONFIG, true);
-                                try {
-                                    tabChannel?.postMessage({
-                                        type: 'FOOD_UPDATED',
-                                        foodEatenToday: maxFood,
-                                        timestamp: Date.now()
-                                    });
-                                } catch { /* ignore */ }
-                                log(`Notifikasi game: Batas konsumsi roti harian tercapai (${maxFood}/${maxFood}).`, 'info');
-                                updatePanel();
-                                return;
-                            }
-                        }
+                if (debounceTimer) return;
+                debounceTimer = setTimeout(() => {
+                    debounceTimer = null;
+                    scanDomForFoodToast();
+                    if (isDashboardPage()) {
+                        readBreadQuotaFromDom(state, CONFIG, log);
+                        updatePanel();
                     }
-                }
+                }, 400);
             });
 
             try {
@@ -922,11 +1179,62 @@ import { initInterceptorClient }                              from './intercepto
             } catch { /* ignore */ }
         }
 
-        // Also scan after user clicks in the document (e.g. eating bread in inventory)
+        // Also scan after user clicks in the document (e.g. eating bread in inventory or dashboard)
         document.addEventListener('click', (e) => {
             if (e.target?.closest?.('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal')) return;
-            setTimeout(scanDomForFoodToast, 400);
+            setTimeout(() => {
+                if (isDashboardPage()) {
+                    readBreadQuotaFromDom(state, CONFIG, log);
+                    updatePanel();
+                }
+                scanDomForFoodToast();
+            }, 300);
+            setTimeout(() => {
+                if (isDashboardPage()) {
+                    readBreadQuotaFromDom(state, CONFIG, log);
+                    updatePanel();
+                }
+            }, 1000);
         }, { passive: true });
+    }
+
+    function setupTrainingModalObserver() {
+        if (typeof MutationObserver === 'undefined' || typeof document === 'undefined') return;
+
+        let debounce = false;
+        const observer = new MutationObserver((mutations) => {
+            if (!CONFIG.autoTrainEnabled) return;
+            if (debounce) return;
+
+            let hasModalMutation = false;
+            for (const m of mutations) {
+                if (m.addedNodes && m.addedNodes.length > 0) {
+                    for (const node of m.addedNodes) {
+                        if (node.nodeType === 1) {
+                            if (node.matches?.('[data-testid*="train-confirm"], [role="dialog"], dialog, div.fixed.inset-0') ||
+                                node.querySelector?.('[data-testid*="confirm"], [role="dialog"], button.btn-gold')) {
+                                hasModalMutation = true;
+                                break;
+                            }
+                        }
+                    }
+                }
+                if (hasModalMutation) break;
+            }
+
+            if (hasModalMutation || getTrainingConfirmStartButton()) {
+                debounce = true;
+                setTimeout(() => { debounce = false; }, 400);
+                autoConfirmTrainingModal(ctx);
+            }
+        });
+
+        try {
+            observer.observe(document.body || document.documentElement, {
+                childList: true,
+                subtree: true
+            });
+        } catch { /* ignore */ }
     }
 
     async function runWorkerLoop() {
@@ -976,14 +1284,48 @@ import { initInterceptorClient }                              from './intercepto
 
                 checkDailyReset();
                 if (state.running) {
+                    if (isDashboardPage() && !state.hasInitialDomEnergyRead) {
+                        await waitForScheduledWork(1000);
+                        continue;
+                    }
                     state.isEnergyFlushActive = isEnergyFlushActive(CONFIG);
                     const effectiveThreshold = getEffectiveEnergyThreshold(state, CONFIG);
 
-                    if (state.currentEnergy < effectiveThreshold && state.nextWorkTimestamp > Date.now()) {
+                    // Continuous energy synchronization: ensure background tabs always calculate fresh energy
+                    const synced = getSyncedEnergy(state);
+                    if (synced) {
+                        state.currentEnergy = synced.current;
+                        state.maxEnergy = synced.max;
+                    }
+
+                    // 1. Check if server cooldown or scheduled wait is active in the future
+                    if (state.serverCooldownUntil && Date.now() < state.serverCooldownUntil) {
+                        state.nextWorkTimestamp = Math.max(state.nextWorkTimestamp || 0, state.serverCooldownUntil);
+                    }
+
+                    // If energy has already regenerated to threshold and no server cooldown is active,
+                    // reset stale hours-long countdowns from when energy was previously empty!
+                    if (state.currentEnergy >= effectiveThreshold && (!state.serverCooldownUntil || Date.now() >= state.serverCooldownUntil)) {
+                        if (state.nextWorkTimestamp && state.nextWorkTimestamp - Date.now() > 30000) {
+                            state.nextWorkTimestamp = 0;
+                        }
+                    }
+
+                    if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
                         const delay = Math.max(1000, state.nextWorkTimestamp - Date.now());
                         await waitForScheduledWork(delay);
                         continue;
                     }
+
+                    // 2. Check if energy is below effective threshold
+                    if (state.currentEnergy < effectiveThreshold) {
+                        const delay = getNextWorkDelay(state, CONFIG);
+                        state.nextWorkTimestamp = Date.now() + delay;
+                        await waitForScheduledWork(delay);
+                        continue;
+                    }
+
+                    // 3. Ready to work
                     const result = await doWork(ctx);
                     if (result === 'retrySoon') {
                         await waitForScheduledWork(5000);
@@ -1039,9 +1381,12 @@ import { initInterceptorClient }                              from './intercepto
                 if (!lock) return;
                 acquired = true;
                 reloadStateFromStorage(state, () => { workHistory = loadWorkHistory(state, CONFIG); });
+                setRunningUI(state.running);
                 if (getValue('aw_workResultUncertain', 'false') === 'true') {
                     state.workResultUncertain = true;
                     state.running = false;
+                    setValue('aw_worker_running', 'false');
+                    setRunningUI(false);
                     updatePanel();
                 }
                 _setTabLockOwner(state, true, ctx);
@@ -1087,11 +1432,24 @@ function _checkAndRefreshToken(state, CONFIG, log, ctx = null) {
     const remaining = state.tokenExpiry - Date.now();
     if (remaining <= 0) {
         if (!state.pausedForToken) {
-            log('Token sesi kedaluwarsa. Me-reload tab otomatis untuk memperbarui token...', 'warn');
             state.pausedForToken = true;
-            setTimeout(() => {
-                window.location.reload();
-            }, 1500);
+            state.tokenExpired = true;
+            let attempts = 0;
+            try {
+                attempts = parseInt(sessionStorage.getItem('aw_token_reload_attempts') || '0', 10);
+            } catch { /* ignore */ }
+            if (attempts < 1) {
+                try { sessionStorage.setItem('aw_token_reload_attempts', (attempts + 1).toString()); } catch {}
+                log('Token sesi kedaluwarsa. Me-reload tab otomatis sekali untuk memperbarui sesi...', 'warn');
+                setTimeout(() => {
+                    window.location.reload();
+                }, 1500);
+            } else {
+                state.running = false;
+                setValue('aw_worker_running', 'false');
+                ctx?.setRunningUI?.(false);
+                log('Token sesi telah kedaluwarsa. Auto Worker dijeda. Silakan login kembali.', 'error');
+            }
         }
         return;
     }
@@ -1112,12 +1470,12 @@ function _setTabLockOwner(state, isOwner, ctx) {
 
 function _logStartup(log, CONFIG, state) {
     const uptime = Math.floor((Date.now() - state.scriptStartTime) / 1000);
-    log('Auto Worker v5.11.0 (Network Interceptor) aktif.', 'success');
-    log(`Energy Threshold: ${CONFIG.energyThreshold} EN`, 'info');
-    log(`History: simpan ${CONFIG.historyMaxDays} hari terakhir`, 'info');
-    log(`Quiet mode: ${CONFIG.quietModeEnabled ? 'ON' : 'OFF'}`, 'info');
-    log(`Shortcuts: ${Object.values(CONFIG.shortcuts).map(s => s.display).join(', ')}`, 'info');
-    log(`Script uptime: ${uptime}s`, 'info');
+    log('Auto Worker v5.12.0 (Gaussian & Route-Throttled) aktif.', 'success', false);
+    log(`Energy Threshold: ${CONFIG.energyThreshold} EN`, 'info', false);
+    log(`History: simpan ${CONFIG.historyMaxDays} hari terakhir`, 'info', false);
+    log(`Quiet mode: ${CONFIG.quietModeEnabled ? 'ON' : 'OFF'}`, 'info', false);
+    log(`Shortcuts: ${Object.values(CONFIG.shortcuts).map(s => s.display).join(', ')}`, 'info', false);
+    log(`Script uptime: ${uptime}s`, 'info', false);
 }
 
 function _watchSpaNavigation(onRouteChanged) {
@@ -1141,5 +1499,5 @@ function _watchSpaNavigation(onRouteChanged) {
         };
     } catch { /* ignore */ }
     window.addEventListener('popstate', check);
-    setInterval(check, 1000);
+    safeSetInterval(check, 1000);
 }

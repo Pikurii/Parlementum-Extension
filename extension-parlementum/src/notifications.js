@@ -58,15 +58,38 @@ export function sendNotification(arg1, arg2, arg3) {
     showInPageNotification(title, message);
 
     try {
-        const isCritical = /expired|401|habis|kadaluarsa|dijeda|login/i.test(`${title} ${message}`);
-        chrome.runtime.sendMessage({
-            type: 'NOTIFY',
-            title,
-            message,
-            priority: isCritical ? 2 : 1,
-            requireInteraction: isCritical
-        });
+        if (typeof chrome !== 'undefined' && chrome?.runtime && chrome.runtime.id) {
+            const isCritical = /expired|401|habis|kadaluarsa|dijeda|login/i.test(`${title} ${message}`);
+            chrome.runtime.sendMessage({
+                type: 'NOTIFY',
+                title,
+                message,
+                priority: isCritical ? 2 : 1,
+                requireInteraction: isCritical
+            })?.catch?.(() => {});
+        }
     } catch { /* extension context may be invalidated */ }
+}
+
+let _hasUserInteracted = false;
+if (typeof window !== 'undefined') {
+    const onUserInteraction = () => {
+        _hasUserInteracted = true;
+        window.removeEventListener('click', onUserInteraction, true);
+        window.removeEventListener('keydown', onUserInteraction, true);
+        window.removeEventListener('touchstart', onUserInteraction, true);
+    };
+    window.addEventListener('click', onUserInteraction, true);
+    window.addEventListener('keydown', onUserInteraction, true);
+    window.addEventListener('touchstart', onUserInteraction, true);
+}
+
+function _canPlayAudio() {
+    if (typeof document !== 'undefined' && document.hidden) return false;
+    if (typeof navigator !== 'undefined' && navigator.userActivation) {
+        return Boolean(navigator.userActivation.hasBeenActive);
+    }
+    return _hasUserInteracted;
 }
 
 /**
@@ -86,8 +109,7 @@ export function playNotificationSound(arg1, arg2) {
     }
 
     if (CONFIG && !CONFIG.soundNotificationEnabled) return;
-    // Avoid triggering AudioContext on hidden background tabs to respect browser autoplay policy
-    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!_canPlayAudio()) return;
 
     const volume = CONFIG?.soundNotificationVolume != null ? CONFIG.soundNotificationVolume : 0.3;
 
@@ -98,7 +120,12 @@ export function playNotificationSound(arg1, arg2) {
     try {
         ctx = new AudioCtx();
         if (ctx.state === 'suspended') {
-            ctx.resume().catch(() => {});
+            if (navigator?.userActivation?.hasBeenActive) {
+                ctx.resume().catch(() => {});
+            } else {
+                ctx.close().catch(() => {});
+                return;
+            }
         }
 
         const osc = ctx.createOscillator();
@@ -137,7 +164,7 @@ export function playNotificationSound(arg1, arg2) {
  */
 export function playEnergyFullAlarm(CONFIG = null) {
     if (CONFIG && !CONFIG.energyFullAlertSoundEnabled) return;
-    if (typeof document !== 'undefined' && document.hidden) return;
+    if (!_canPlayAudio()) return;
 
     const volume = CONFIG?.energyFullAlertVolume != null ? CONFIG.energyFullAlertVolume : 0.3;
 
@@ -148,7 +175,12 @@ export function playEnergyFullAlarm(CONFIG = null) {
     try {
         ctx = new AudioCtx();
         if (ctx.state === 'suspended') {
-            ctx.resume().catch(() => {});
+            if (navigator?.userActivation?.hasBeenActive) {
+                ctx.resume().catch(() => {});
+            } else {
+                ctx.close().catch(() => {});
+                return;
+            }
         }
         const start = ctx.currentTime;
         [660, 880, 1100].forEach((freq, i) => {

@@ -34,10 +34,26 @@ export const DEFAULT_CONFIG = {
     foodResetReminderEnabled: true,
     maxFoodDaily: 10,
     sleepScheduleEnabled: false,
-    sleepStartHour: 1,
-    sleepEndHour: 6,
+    sleepStartHour: 23,
+    sleepEndHour: 5,
+    sleepStartTime: '23:30',
+    sleepEndTime: '05:45',
+    microBreaksEnabled: false,
+    microBreakFrequencyHours: 4,
+    microBreakDurationMinutes: 10,
+    energyThresholdJitterEnabled: false,
+    energyThresholdJitterRange: 3,
     autoReloginEnabled: false,
     ecoModeEnabled: true,
+    autoTrainEnabled: false,
+    trainStrengthEnabled: true,
+    trainEducationEnabled: true,
+    trainEconomyEnabled: true,
+    trainPriority: 'education',
+    targetStrength: 100,
+    targetEducation: 100,
+    targetEconomy: 100,
+    minGoldReserve: 50,
     shortcuts: {
         showHide:     { keys: ['Control', 'Shift', 'KeyA'], display: 'Ctrl+Shift+A' },
         workNow:      { keys: ['Alt', 'Shift', 'KeyW'],    display: 'Alt+Shift+W' },
@@ -47,7 +63,7 @@ export const DEFAULT_CONFIG = {
     }
 };
 
-const NUMERIC_BOUNDS = {
+export const NUMERIC_BOUNDS = {
     tokenRefreshInterval:      [1000, 86400000],
     tokenExpiryThreshold:      [0,    86400000],
     panelDefaultX:             [0,    10000],
@@ -56,12 +72,19 @@ const NUMERIC_BOUNDS = {
     energyFullAlertVolume:     [0,    1],
     maxLogEntries:             [1,    1000],
     quietModeInterval:         [1000, 86400000],
-    energyThreshold:           [10,   100],
+    energyThreshold:           [10,   210],
     stealthJitterMaxSeconds:   [5,    120],
     maxFoodDaily:              [10,   20],
     historyMaxDays:            [1,    365],
     sleepStartHour:            [0,    23],
-    sleepEndHour:              [0,    23]
+    sleepEndHour:              [0,    23],
+    microBreakFrequencyHours:  [1,    12],
+    microBreakDurationMinutes: [3,    45],
+    energyThresholdJitterRange: [1,   10],
+    targetStrength:            [1,    500],
+    targetEducation:           [1,    500],
+    targetEconomy:             [1,    500],
+    minGoldReserve:            [0,    1000000]
 };
 
 export function isPlainObject(value) {
@@ -78,6 +101,13 @@ export function normalizeConfig(candidate, strict = false) {
     for (const [key, value] of Object.entries(candidate)) {
         if (key === 'shortcuts' || value === undefined) continue;
 
+        if (key === 'sleepStartTime' || key === 'sleepEndTime') {
+            if (typeof value === 'string' && /^\d{1,2}:\d{2}$/.test(value)) {
+                config[key] = value;
+            } else if (strict) return null;
+            continue;
+        }
+
         if (typeof DEFAULT_CONFIG[key] === 'boolean') {
             if (typeof value === 'boolean') config[key] = value;
             else if (strict) return null;
@@ -90,6 +120,13 @@ export function normalizeConfig(candidate, strict = false) {
                 && value >= bounds[0] && value <= bounds[1];
             if (valid) config[key] = value;
             else if (strict) return null;
+            continue;
+        }
+
+        if (key === 'trainPriority') {
+            if (['education', 'economy', 'strength', 'balanced'].includes(value)) {
+                config.trainPriority = value;
+            } else if (strict) return null;
         }
     }
 

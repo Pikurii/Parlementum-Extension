@@ -6,8 +6,9 @@
  * Directly updates energy state, tokens, and work stats from raw server JSON.
  */
 
-import { patchPageVisualEnergy } from './energy.js';
+import { isDashboardPage } from './energy.js';
 import { setValue } from './storage.js';
+import { broadcastTabMessage } from './broadcast.js';
 
 const MSG_SOURCE = 'PARLAMENTUM_INTERCEPTOR';
 const EXT_SOURCE = 'PARLAMENTUM_EXTENSION';
@@ -52,31 +53,34 @@ export function initInterceptorClient(state, CONFIG, ctx) {
                     const maxF = CONFIG.maxFoodDaily || 10;
                     state.foodEatenToday = Math.max(0, Math.min(maxF, Math.round(msg.foodEatenToday)));
                     setValue('aw_foodEatenToday', state.foodEatenToday.toString());
-                    try {
-                        const ch = new BroadcastChannel('aw_parlamentum_tabs');
-                        ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
-                        ch.close();
-                    } catch { /* ignore */ }
+                    broadcastTabMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
                     ctx?.updatePanel?.();
                 }
                 break;
 
             case 'FOOD_CONSUMED': {
                 const now = Date.now();
-                if (state._lastFoodConsumedAt && (now - state._lastFoodConsumedAt < 1500)) {
+                if (state._lastFoodConsumedAt && (now - state._lastFoodConsumedAt < 1000)) {
                     break;
                 }
                 state._lastFoodConsumedAt = now;
+                // Primary: read authoritative DOM ground truth on dashboard
+                if (ctx?.readBreadQuotaFromDom) {
+                    setTimeout(() => {
+                        ctx.readBreadQuotaFromDom();
+                        ctx?.updatePanel?.();
+                    }, 350);
+                    break;
+                }
                 const maxF = CONFIG.maxFoodDaily || 10;
-                state.foodEatenToday = Math.min(maxF, (state.foodEatenToday || 0) + 1);
-                setValue('aw_foodEatenToday', state.foodEatenToday.toString());
-                try {
-                    const ch = new BroadcastChannel('aw_parlamentum_tabs');
-                    ch.postMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
-                    ch.close();
-                } catch { /* ignore */ }
-                ctx?.log?.(`Makan roti terdeteksi (+1): ${state.foodEatenToday}/${maxF} slot terpakai.`, 'info');
-                ctx?.updatePanel?.();
+                const prev = state.foodEatenToday || 0;
+                if (prev < maxF) {
+                    state.foodEatenToday = prev + 1;
+                    setValue('aw_foodEatenToday', state.foodEatenToday.toString());
+                    broadcastTabMessage({ type: 'FOOD_UPDATED', foodEatenToday: state.foodEatenToday, timestamp: Date.now() });
+                    ctx?.log?.(`Makan roti terdeteksi (+1): ${state.foodEatenToday}/${maxF} slot terpakai.`, 'info');
+                    ctx?.updatePanel?.();
+                }
                 break;
             }
 
@@ -88,6 +92,41 @@ export function initInterceptorClient(state, CONFIG, ctx) {
                     ctx?.log?.('Akun Premium terdeteksi: Kuota makanan harian disesuaikan jadi 20 slot.', 'info');
                     ctx?.updatePanel?.();
                 }
+                break;
+
+            case 'WALLET_GOLD_SYNC':
+                if (typeof msg.gold === 'number' && msg.gold >= 0 && msg.gold !== state.walletGold) {
+                    state.walletGold = msg.gold;
+                    setValue('aw_wallet_gold', msg.gold.toString());
+                    ctx?.saveLiveStatus?.(true);
+                    ctx?.updatePanel?.();
+                }
+                break;
+
+            case 'PLAYER_STATS_SYNC':
+                if (msg && typeof msg === 'object') {
+                    if (!state.trainingStats) state.trainingStats = { strength: 0, education: 0, economy: 0 };
+                    let changed = false;
+                    ['strength', 'education', 'economy'].forEach(k => {
+                        if (typeof msg[k] === 'number' && msg[k] >= 0 && msg[k] !== state.trainingStats[k]) {
+                            state.trainingStats[k] = msg[k];
+                            setValue(`aw_stat_${k}`, msg[k].toString());
+                            changed = true;
+                        }
+                    });
+                    if (changed) {
+                        ctx?.saveLiveStatus?.(true);
+                        ctx?.updatePanel?.();
+                    }
+                }
+                break;
+
+            case 'TRAIN_SUCCESS':
+                ctx?.handleTrainSuccess?.(msg);
+                break;
+
+            case 'TRAIN_REJECTED':
+                ctx?.handleTrainRejected?.(msg);
                 break;
 
             default:
@@ -122,8 +161,11 @@ function _handleEnergySync(state, msg, ctx) {
 
     if (typeof curRaw === 'number' && Number.isFinite(curRaw)) {
         const cur = Math.max(0, Math.round(curRaw));
-        state.currentEnergy = cur;
-        updated = true;
+        // Protect against generic background API calls returning 0 before initial DOM read
+        if (cur > 0 || state.hasInitialDomEnergyRead || state.postShiftEnergy === 0) {
+            state.currentEnergy = cur;
+            updated = true;
+        }
     }
 
     if (typeof maxRaw === 'number' && Number.isFinite(maxRaw) && maxRaw > 0) {
@@ -135,7 +177,8 @@ function _handleEnergySync(state, msg, ctx) {
         state.energySyncBase = {
             current: state.currentEnergy,
             max: state.maxEnergy || 110,
-            updatedAt: Date.now()
+            updatedAt: Date.now(),
+            regenRate: state.regenRate || 1.0
         };
         ctx?.updatePanel?.();
     }
@@ -143,10 +186,11 @@ function _handleEnergySync(state, msg, ctx) {
 
 function _handleWorkSuccess(state, msg, ctx) {
     const rawUsed = Number(msg.energyUsed) || Number(msg.raw?.energyUsed) || 0;
-    const used = rawUsed >= 10 ? rawUsed : 10;
-    // In Parlamentum, each block of 10 energy yields 4 XP
+    const xpRaw = Number(msg.xpEarned) > 0 ? Number(msg.xpEarned) : (Number(msg.raw?.xpEarned) || 0);
+    const calculatedUsedFromXp = xpRaw > 0 ? Math.round((xpRaw / 4) * 10) : 0;
+    const used = rawUsed >= 10 ? rawUsed : (calculatedUsedFromXp >= 10 ? calculatedUsedFromXp : (state.currentEnergy >= 10 ? state.currentEnergy : 10));
     const calculatedXp = Math.max(4, Math.floor(used / 10) * 4);
-    const xp = Number(msg.xpEarned) > 0 ? Number(msg.xpEarned) : calculatedXp;
+    const xp = xpRaw > 0 ? xpRaw : calculatedXp;
     const units = Number(msg.workerUnits) || Number(msg.produced) || Number(msg.raw?.workerUnits) || Number(msg.raw?.produced) || 0;
 
     // If extension initiated the fetch directly, work.js already manages state & logging
@@ -164,10 +208,16 @@ function _handleWorkSuccess(state, msg, ctx) {
         state.currentEnergy = Math.max(0, (state.currentEnergy || 0) - used);
     }
 
+    state.shiftExecutedInSession = true;
+    state.postShiftEnergy = state.currentEnergy;
+    state.domEnergyStale = true;
+    state.lastWorkTimestamp = Date.now();
+
     state.energySyncBase = {
         current: state.currentEnergy,
         max: state.maxEnergy || 110,
-        updatedAt: Date.now()
+        updatedAt: Date.now(),
+        regenRate: state.regenRate || 1.0
     };
 
     const nowStr = new Date().toLocaleTimeString('id-ID');
@@ -176,7 +226,6 @@ function _handleWorkSuccess(state, msg, ctx) {
     state.xpToday = (state.xpToday || 0) + xp;
     state.totalWorkXP = (state.totalWorkXP || 0) + xp;
     state.lastWorkTime = nowStr;
-    state.lastWorkTimestamp = Date.now();
     if (ctx?.getNextWorkDelay) {
         state.nextWorkTimestamp = Date.now() + ctx.getNextWorkDelay(state);
     }
@@ -191,30 +240,39 @@ function _handleWorkSuccess(state, msg, ctx) {
         ? `Kerja sukses! +${xp} XP${unitsPart}`
         : `Shift di game terdeteksi: +${xp} XP${unitsPart}`;
     ctx?.log?.(logMsg, 'success');
+    ctx?.saveLiveStatus?.(true);
     ctx?.updatePanel?.();
 
-    // After 600ms, sync ground-truth energy from the newly updated page DOM
+    // After 1500ms, sync ground-truth energy from the newly updated page DOM (guarding against stale DOM)
     setTimeout(() => {
+        state.shiftExecutedInSession = false;
         const fresh = ctx?.getCurrentEnergy?.();
-        if (fresh && fresh.current !== state.currentEnergy) {
+        if (fresh && fresh.current <= (state.postShiftEnergy || 0) + 2) {
             state.currentEnergy = fresh.current;
             state.maxEnergy = fresh.max;
-            state.energySyncBase = { current: fresh.current, max: fresh.max, updatedAt: Date.now() };
+            state.energySyncBase = { current: fresh.current, max: fresh.max, updatedAt: Date.now(), regenRate: state.regenRate || 1.0 };
+            state.domEnergyStale = false;
+            ctx?.saveLiveStatus?.(true);
             ctx?.updatePanel?.();
         }
-    }, 600);
+    }, 1500);
 }
 
 function _handleWorkRejected(state, msg, ctx) {
     const errorMsg = String(msg.message || msg.raw?.message || '');
-    if (/not enough energy|energi tidak cukup|kurang/i.test(errorMsg)) {
+    if (/(?:not enough energy|produce even one unit|insufficient|tidak cukup|kurang)/i.test(errorMsg)) {
+        const nowMs = Date.now();
         state.currentEnergy = 0;
+        state.postShiftEnergy = 0;
+        state.lastWorkTimestamp = nowMs;
+        state.domEnergyStale = true;
         state.energySyncBase = {
             current: 0,
             max: state.maxEnergy || 110,
-            updatedAt: Date.now()
+            updatedAt: nowMs,
+            regenRate: state.regenRate || 1.0
         };
-        patchPageVisualEnergy(0, state.maxEnergy, true);
+        ctx?.saveLiveStatus?.(true);
         ctx?.updatePanel?.();
     }
 }

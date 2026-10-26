@@ -1,0 +1,2087 @@
+<!DOCTYPE html>
+<html lang="id" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Parlementum Auto Worker — UI/UX Design System & Interactive Prototype</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            cyber: {
+              bg: '#0a0e1a',
+              card: 'rgba(22, 27, 42, 0.75)',
+              cardSolid: '#161b2a',
+              elevated: 'rgba(30, 38, 58, 0.85)',
+              cyan: '#38bdf8',
+              indigo: '#6366f1',
+              emerald: '#10b981',
+              amber: '#f59e0b',
+              rose: '#f43f5e',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ==========================================================================
+       PARLEMENTUM AUTO WORKER — CORE DESIGN TOKENS & GLASSMORPHISM CSS
+       ========================================================================== */
+    :root {
+      --bg-abyss: #0a0e1a;
+      --surface-card: rgba(22, 27, 42, 0.75);
+      --surface-elevated: rgba(30, 39, 59, 0.82);
+      --surface-inner: rgba(13, 18, 30, 0.72);
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(56, 189, 248, 0.32);
+      --cyan-glow: rgba(56, 189, 248, 0.25);
+      --emerald-glow: rgba(16, 185, 129, 0.28);
+      --amber-glow: rgba(245, 158, 11, 0.28);
+      --rose-glow: rgba(244, 63, 94, 0.28);
+    }
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+    }
+
+    body {
+      background-color: var(--bg-abyss);
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(56, 189, 248, 0.08) 0%, transparent 40%),
+        radial-gradient(circle at 85% 20%, rgba(99, 102, 241, 0.08) 0%, transparent 45%),
+        radial-gradient(circle at 50% 85%, rgba(16, 185, 129, 0.05) 0%, transparent 45%),
+        linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+      background-size: 100% 100%, 100% 100%, 100% 100%, 32px 32px, 32px 32px;
+      color: #f1f5f9;
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+      overflow-x: hidden;
+    }
+
+    /* Enforce Tabular Numerals for all metrics, timers, and counters */
+    .tabular-nums {
+      font-family: 'JetBrains Mono', monospace;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: -0.02em;
+    }
+
+    /* Main Glass Shell (Panel / Popup / Modal) */
+    .paw-shell {
+      background: rgba(13, 18, 30, 0.88);
+      backdrop-filter: blur(20px) saturate(160%);
+      -webkit-backdrop-filter: blur(20px) saturate(160%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      box-shadow: 
+        0 24px 48px -12px rgba(0, 0, 0, 0.75),
+        0 0 0 1px rgba(56, 189, 248, 0.06),
+        inset 0 1px 0 0 rgba(255, 255, 255, 0.12);
+    }
+
+    /* Modular Inner Glass Card */
+    .paw-card {
+      background: var(--surface-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--border-subtle);
+      box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.05);
+      transition: border-color 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease;
+    }
+
+    .paw-card:hover {
+      border-color: rgba(56, 189, 248, 0.28);
+      background: rgba(26, 33, 52, 0.82);
+    }
+
+    /* Recessed Well for Sub-Metrics */
+    .paw-well {
+      background: var(--surface-inner);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+    }
+
+    /* Subtle Pulse Animations for Live Status Dots & Flush Badges */
+    @keyframes pulseRing {
+      0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+      70% { transform: scale(1); box-shadow: 0 0 0 6px rgba(16, 185, 129, 0); }
+      100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+    }
+
+    @keyframes pulseAmber {
+      0%, 100% { opacity: 1; box-shadow: 0 0 10px rgba(245, 158, 11, 0.35); }
+      50% { opacity: 0.72; box-shadow: 0 0 4px rgba(245, 158, 11, 0.1); }
+    }
+
+    @keyframes shimmerBar {
+      0% { background-position: -200% 0; }
+      100% { background-position: 200% 0; }
+    }
+
+    .status-dot-active {
+      animation: pulseRing 2s infinite;
+    }
+
+    .badge-flush-pulse {
+      animation: pulseAmber 2.2s infinite ease-in-out;
+    }
+
+    .energy-progress-fill {
+      background: linear-gradient(90deg, #0ea5e9 0%, #38bdf8 45%, #818cf8 85%, #38bdf8 100%);
+      background-size: 200% 100%;
+      animation: shimmerBar 5s infinite linear;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+      transition: width 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    /* Custom Range Slider Styling */
+    input[type="range"].paw-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 100%;
+      height: 6px;
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 999px;
+      outline: none;
+    }
+
+    input[type="range"].paw-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: #38bdf8;
+      border: 2px solid #0a0e1a;
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.8);
+      cursor: pointer;
+      transition: transform 0.15s ease, background-color 0.15s ease;
+    }
+
+    input[type="range"].paw-slider::-webkit-slider-thumb:hover {
+      transform: scale(1.12);
+      background: #7dd3fc;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(10, 14, 26, 0.6);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.25);
+      border-radius: 999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(56, 189, 248, 0.5);
+    }
+
+    /* Button Micro-interaction */
+    .btn-cyber {
+      transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .btn-cyber:active {
+      transform: translateY(1px) scale(0.985);
+    }
+  </style>
+</head>
+<body class="min-h-screen flex flex-col selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- ==========================================================================
+       TOP SHOWCASE HEADER & SURFACE SWITCHER
+       ========================================================================== -->
+  <header class="sticky top-0 z-40 border-b border-white/10 bg-[#0a0e1a]/90 backdrop-blur-xl">
+    <div class="max-w-[1440px] mx-auto px-4 sm:px-6 py-3 flex flex-wrap items-center justify-between gap-3">
+      <!-- Brand Identity -->
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-sky-500/20 to-indigo-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 shadow-[0_0_15px_rgba(56,189,248,0.2)]">
+          <!-- Bot SVG Icon -->
+          <svg class="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+            <circle cx="12" cy="5" r="2"></circle>
+            <path d="M12 7v4"></path>
+            <line x1="8" y1="16" x2="8" y2="16"></line>
+            <line x1="16" y1="16" x2="16" y2="16"></line>
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-[14px] font-bold tracking-wider uppercase text-white">Parlementum Auto Worker</h1>
+            <span class="px-2 py-0.5 text-[12px] font-medium rounded-full bg-sky-500/15 text-sky-300 border border-sky-400/30 tabular-nums">UI/UX v5.12.0</span>
+          </div>
+          <p class="text-[12px] text-slate-400">Fintech Glassmorphism Dark Mode • Zero-Emoji Vector SVG • Tabular Monospace Telemetry</p>
+        </div>
+      </div>
+
+      <!-- View Switcher Controls -->
+      <div class="flex flex-wrap items-center gap-1.5 bg-slate-900/90 p-1 rounded-xl border border-white/10">
+        <button onclick="setShowcaseView('all')" id="nav-btn-all" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+          <span>Semua Permukaan</span>
+        </button>
+        <button onclick="setShowcaseView('surface-a')" id="nav-btn-surface-a" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-300 hover:text-white border border-transparent flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"></rect>
+            <line x1="8" y1="21" x2="16" y2="21"></line>
+            <line x1="12" y1="17" x2="12" y2="21"></line>
+          </svg>
+          <span>A: In-Game Panel</span>
+        </button>
+        <button onclick="setShowcaseView('surface-b')" id="nav-btn-surface-b" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-300 hover:text-white border border-transparent flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+            <polyline points="15 3 21 3 21 9"></polyline>
+            <line x1="10" y1="14" x2="21" y2="3"></line>
+          </svg>
+          <span>B: Toolbar Popup</span>
+        </button>
+        <button onclick="setShowcaseView('surface-c')" id="nav-btn-surface-c" class="btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-300 hover:text-white border border-transparent flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+          <span>C: Settings Modal (5 Tab)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       INTERACTIVE NOTIFICATION TOAST (NO ALERTS ALLOWED)
+       ========================================================================== -->
+  <div id="toast-container" class="fixed bottom-5 right-5 z-50 flex flex-col gap-2 pointer-events-none"></div>
+
+  <!-- ==========================================================================
+       MAIN WORKSPACE: THREE SURFACES SHOWCASE
+       ========================================================================== -->
+  <main class="flex-1 max-w-[1440px] w-full mx-auto px-4 sm:px-6 py-6">
+
+    <!-- Interactive State Synchronization Banner -->
+    <div class="mb-6 paw-card rounded-xl px-4 py-3 flex flex-wrap items-center justify-between gap-3 border-l-2 border-l-sky-400">
+      <div class="flex items-center gap-2.5">
+        <span class="w-2 h-2 rounded-full bg-sky-400"></span>
+        <p class="text-[12px] text-slate-300">
+          <span class="font-semibold text-white">Simulasi State Real-Time Aktif:</span> Seluruh permukaan (Panel Game, Kapsul Ringkas, Toolbar Popup, & Kalkulator Emas di Pengaturan) saling terhubung secara langsung. Coba klik tombol koreksi roti, sakelar latihan, atau ubah target level stats.
+        </p>
+      </div>
+      <div class="flex items-center gap-2">
+        <button onclick="simulateEnergyGain(20)" class="btn-cyber px-2.5 py-1 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-300 border border-sky-400/30 text-[12px] font-medium flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+          </svg>
+          <span>Simulasi +20 Energi</span>
+        </button>
+        <button onclick="toggleFlushState()" class="btn-cyber px-2.5 py-1 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 border border-amber-400/30 text-[12px] font-medium flex items-center gap-1.5">
+          <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"></circle>
+            <polyline points="12 6 12 12 16 14"></polyline>
+          </svg>
+          <span>Toggle Status FLUSH</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- ========================================================================
+         GRID CONTAINER FOR ALL 3 SURFACES
+         ======================================================================== -->
+    <div id="surfaces-grid" class="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+
+      <!-- ======================================================================
+           SURFACE A: FLOATING IN-GAME PANEL (356px) + FLOATING PILL CAPSULE
+           ====================================================================== -->
+      <section id="section-surface-a" class="xl:col-span-4 flex flex-col items-center">
+        <!-- Section Label -->
+        <div class="w-[356px] max-w-full mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-sky-500/20 border border-sky-400/30 text-sky-300 font-mono text-[12px] font-semibold">PERMUKAAN A</span>
+            <h2 class="text-[13px] font-semibold text-white">Floating In-Game Panel</h2>
+          </div>
+          <span class="text-[12px] font-mono text-slate-400">356px</span>
+        </div>
+
+        <!-- ------------------------------------------------------------------
+             A.2 MODE RINGKAS: FLOATING PILL CAPSULE (Height: 36px)
+             Always shown above or highlighted when minimized so user can inspect both
+             ------------------------------------------------------------------ -->
+        <div class="w-[356px] max-w-full mb-3.5">
+          <div class="flex items-center justify-between mb-1.5 px-1">
+            <span class="text-[12px] font-medium text-slate-400 flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="7" width="20" height="10" rx="5"></rect>
+              </svg>
+              Mode 2: Floating Pill Capsule (Tinggi 36px)
+            </span>
+            <button onclick="togglePanelMode()" id="pill-mode-switch-label" class="text-[12px] text-sky-400 hover:text-sky-300 font-medium underline underline-offset-2">
+              Fokus Kapsul
+            </button>
+          </div>
+
+          <!-- THE PILL CAPSULE -->
+          <div id="floating-pill-capsule" class="paw-shell h-[36px] px-3 rounded-full flex items-center justify-between gap-2 border border-sky-400/25 shadow-[0_10px_25px_rgba(0,0,0,0.65)] transition-all duration-300">
+            <!-- Left: Robot SVG + Pulsing Status Dot -->
+            <div class="flex items-center gap-2">
+              <div class="text-sky-400 flex items-center">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                  <circle cx="12" cy="5" r="2"></circle>
+                  <path d="M12 7v4"></path>
+                </svg>
+              </div>
+              <span id="pill-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 status-dot-active"></span>
+            </div>
+
+            <!-- Energy Badge [Bolt SVG + 44/210] -->
+            <div class="px-2 py-0.5 rounded-full bg-sky-500/15 border border-sky-400/25 flex items-center gap-1 text-sky-300">
+              <svg class="w-3.5 h-3.5 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span id="pill-energy-text" class="text-[13px] font-semibold tabular-nums">44/210</span>
+            </div>
+
+            <!-- Countdown Badge [Clock SVG + 37m] -->
+            <div class="px-2 py-0.5 rounded-full bg-slate-800/90 border border-white/10 flex items-center gap-1 text-slate-200">
+              <svg class="w-3.5 h-3.5 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+              <span id="pill-countdown-text" class="text-[13px] font-medium tabular-nums">37m</span>
+            </div>
+
+            <!-- Right Actions: Mini Pause/Play Toggle + Expand Button -->
+            <div class="flex items-center gap-1">
+              <button onclick="toggleBotPause()" id="pill-toggle-btn" title="Jeda / Lanjut Bot" class="btn-cyber w-6 h-6 rounded-full bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/30 flex items-center justify-center text-rose-300">
+                <svg id="pill-toggle-icon" class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+              </button>
+              <button onclick="expandFromPill()" title="Perbesar Panel (Mode Penuh)" class="btn-cyber w-6 h-6 rounded-full bg-slate-800 hover:bg-sky-500/25 border border-white/10 hover:border-sky-400/40 flex items-center justify-center text-slate-300 hover:text-sky-300">
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <polyline points="9 21 3 21 3 15"></polyline>
+                  <line x1="21" y1="3" x2="14" y2="10"></line>
+                  <line x1="3" y1="21" x2="10" y2="14"></line>
+                </svg>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- ------------------------------------------------------------------
+             A.1 MODE PENUH: EXPANDED FLOATING IN-GAME PANEL (Width: 356px)
+             ------------------------------------------------------------------ -->
+        <div id="panel-a-expanded-wrapper" class="w-[356px] max-w-full transition-all duration-300">
+          <div class="flex items-center justify-between mb-1.5 px-1">
+            <span class="text-[12px] font-medium text-slate-400">Mode 1: Mode Penuh (Expanded 356px)</span>
+            <span id="pin-indicator-label" class="text-[12px] text-sky-400 font-medium">Posisi Terkunci (Pinned)</span>
+          </div>
+
+          <div class="paw-shell rounded-2xl p-3.5 flex flex-col gap-2.5 relative overflow-hidden">
+            <!-- Top Subtle Accent Glow Line -->
+            <div class="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-sky-400/60 to-transparent"></div>
+
+            <!-- 1. HEADER BAR -->
+            <div class="flex items-center justify-between pb-2 border-b border-white/10">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                    <circle cx="12" cy="5" r="2"></circle>
+                    <path d="M12 7v4"></path>
+                    <line x1="8" y1="16" x2="8" y2="16"></line>
+                    <line x1="16" y1="16" x2="16" y2="16"></line>
+                  </svg>
+                </div>
+                <span class="text-[13px] font-bold tracking-wider text-white uppercase">AUTO WORKER</span>
+                <span id="panel-a-status-dot" class="w-2.5 h-2.5 rounded-full bg-emerald-400 status-dot-active" title="Status Bot Aktif"></span>
+              </div>
+
+              <!-- 4 Header Buttons: Minimize/Pill, Pin/Lock, Settings, Hide/Close -->
+              <div class="flex items-center gap-1">
+                <!-- Minimize to Pill -->
+                <button onclick="togglePanelMode()" title="Mode Ringkas (Floating Pill)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 flex items-center justify-center text-slate-300 hover:text-white">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="4 14 10 14 10 20"></polyline>
+                    <polyline points="20 10 14 10 14 4"></polyline>
+                    <line x1="14" y1="10" x2="21" y2="3"></line>
+                    <line x1="3" y1="21" x2="10" y2="14"></line>
+                  </svg>
+                </button>
+                <!-- Pin / Lock -->
+                <button onclick="togglePinLock()" id="btn-pin-lock" title="Kunci Posisi Panel (Pin/Lock)" class="btn-cyber w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                  </svg>
+                </button>
+                <!-- Settings -->
+                <button onclick="focusSurfaceC()" title="Buka Menu Pengaturan" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-white/10 flex items-center justify-center text-slate-300 hover:text-sky-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                  </svg>
+                </button>
+                <!-- Hide / Close -->
+                <button onclick="showToast('Panel disembunyikan sementara (Gunakan Alt+H untuk menampilkan)', 'info')" title="Sembunyikan Panel (Alt+H)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 hover:bg-rose-500/20 border border-white/10 hover:border-rose-400/30 flex items-center justify-center text-slate-300 hover:text-rose-300">
+                  <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                  </svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- 2. BARIS WILAYAH & BUFF + BARIS WAKTU UTC -->
+            <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2">
+              <!-- Wilayah & Buff -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                    <circle cx="12" cy="10" r="3"></circle>
+                  </svg>
+                  <span class="text-[12px] text-slate-400">Lokasi:</span>
+                  <span class="text-[13px] font-semibold text-white">Jakarta</span>
+                </div>
+                <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold tabular-nums flex items-center gap-1">
+                  <svg class="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                    <polyline points="17 6 23 6 23 12"></polyline>
+                  </svg>
+                  +50% Regen
+                </span>
+              </div>
+
+              <div class="h-[1px] bg-white/5"></div>
+
+              <!-- Waktu UTC & Reset Harian + FLUSH Badge -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 6 12 12 16 14"></polyline>
+                  </svg>
+                  <span id="utc-clock-a" class="text-[13px] font-semibold text-slate-200 tabular-nums">13:34:20 UTC</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                  <span id="utc-reset-a" class="text-[12px] text-slate-300 tabular-nums">Reset: 10j 41m</span>
+                  <span id="flush-badge-a" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[12px] font-bold tracking-wide tabular-nums badge-flush-pulse">
+                    FLUSH
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 3. PELACAK MAKANAN (ROTI) -->
+            <div class="paw-card rounded-xl p-2.5 flex items-center justify-between gap-2">
+              <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/25 flex items-center justify-center text-amber-300 shrink-0">
+                  <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                    <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                    <line x1="6" y1="1" x2="6" y2="4"></line>
+                    <line x1="10" y1="1" x2="10" y2="4"></line>
+                    <line x1="14" y1="1" x2="14" y2="4"></line>
+                  </svg>
+                </div>
+                <div>
+                  <div class="text-[12px] text-slate-400 font-medium">Kuota Roti Harian</div>
+                  <div id="bread-counter-a" class="text-[13px] font-semibold text-white tabular-nums">9/20 • 11 sisa</div>
+                </div>
+              </div>
+
+              <!-- 3 Tombol Koreksi Cepat: [-], [+], [Max] -->
+              <div class="flex items-center gap-1">
+                <button onclick="adjustBread(-1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center" title="Kurangi Pemakaian Roti">
+                  -
+                </button>
+                <button onclick="adjustBread(1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center" title="Tambah Pemakaian Roti">
+                  +
+                </button>
+                <button onclick="setBreadMax()" class="btn-cyber px-2.5 h-7 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 font-mono text-[12px] font-semibold flex items-center justify-center" title="Set Kuota Maksimal">
+                  Max
+                </button>
+              </div>
+            </div>
+
+            <!-- 4. KARTU LIVE ENERGI -->
+            <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+              <div class="flex items-baseline justify-between">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                  </svg>
+                  <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">ENERGI</span>
+                </div>
+                <div class="flex items-baseline gap-1">
+                  <span id="energy-value-a" class="text-[20px] font-bold text-white tabular-nums leading-none">44/210</span>
+                  <span id="energy-pct-a" class="text-[12px] text-sky-400 font-mono tabular-nums">(21%)</span>
+                </div>
+              </div>
+
+              <!-- Progress Bar Gradasi Halus -->
+              <div class="w-full h-2.5 rounded-full bg-slate-900/95 border border-white/10 overflow-hidden p-0.5">
+                <div id="energy-bar-a" class="h-full rounded-full energy-progress-fill" style="width: 21%;"></div>
+              </div>
+
+              <!-- Sub-info Next Work & Full -->
+              <div class="flex items-center justify-between pt-0.5 text-[12px]">
+                <div class="flex items-center gap-1 text-slate-300">
+                  <span class="text-slate-400">Next Work:</span>
+                  <span id="next-work-a" class="font-semibold text-sky-300 tabular-nums">37m 19s</span>
+                </div>
+                <div class="flex items-center gap-1 text-slate-300">
+                  <span class="text-slate-400">Full:</span>
+                  <span id="full-energy-a" class="font-semibold text-slate-200 tabular-nums">1j 47mnt</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 5. KARTU FOKUS KERJA -->
+            <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-2">
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center gap-1.5">
+                  <span id="work-status-badge-a" class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold">
+                    Auto Kerja: AKTIF
+                  </span>
+                </div>
+                <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-0.5">
+                  <span>Target Ambang:</span>
+                  <span id="work-threshold-badge-a" class="px-1.5 py-0.2 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 font-semibold tabular-nums">
+                    &gt;= 100 EN
+                  </span>
+                </div>
+              </div>
+
+              <!-- Angka Besar Countdown -->
+              <div class="paw-well px-3 py-1.5 rounded-xl text-right">
+                <div class="text-[12px] text-slate-400">Hitung Mundur</div>
+                <div id="work-countdown-large-a" class="text-[18px] font-bold text-white tabular-nums tracking-tight">00:37:19</div>
+              </div>
+            </div>
+
+            <!-- 6. KARTU LATIHAN STATS -->
+            <div class="paw-card rounded-xl p-3 flex flex-col gap-2.5">
+              <!-- Header + Toggle Badge -->
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M18 20V10"></path>
+                    <path d="M12 20V4"></path>
+                    <path d="M6 20v-6"></path>
+                  </svg>
+                  <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">LATIHAN STATS</span>
+                </div>
+                <button onclick="toggleStatsTraining()" id="stats-toggle-badge-a" class="btn-cyber px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1">
+                  <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                  <span>AKTIF</span>
+                </button>
+              </div>
+
+              <!-- 3 Kotak Badge Mini (STR 82, EDU 50, EKO 51) -->
+              <div class="grid grid-cols-3 gap-2">
+                <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-rose-400">
+                  <span class="text-[12px] font-medium text-slate-400">STR</span>
+                  <span id="stat-str-a" class="text-[14px] font-bold text-white tabular-nums">82</span>
+                </div>
+                <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-sky-400">
+                  <span class="text-[12px] font-medium text-slate-400">EDU</span>
+                  <span id="stat-edu-a" class="text-[14px] font-bold text-white tabular-nums">50</span>
+                </div>
+                <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-emerald-400">
+                  <span class="text-[12px] font-medium text-slate-400">EKO</span>
+                  <span id="stat-eko-a" class="text-[14px] font-bold text-white tabular-nums">51</span>
+                </div>
+              </div>
+
+              <!-- Status Latihan Aktif dengan Timer Hitung Mundur -->
+              <div class="paw-well rounded-lg px-2.5 py-2 flex flex-col gap-1.5">
+                <div class="flex items-center justify-between text-[12px]">
+                  <span id="active-training-label-a" class="font-medium text-indigo-300 flex items-center gap-1.5">
+                    <svg class="w-3.5 h-3.5 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+                    </svg>
+                    Latih Kekuatan Lv 83
+                  </span>
+                  <span class="font-semibold text-white tabular-nums">1j 13m</span>
+                </div>
+                <div class="w-full h-1.5 rounded-full bg-slate-900 overflow-hidden">
+                  <div class="h-full bg-gradient-to-r from-indigo-500 to-sky-400 rounded-full" style="width: 64%;"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 7. BARIS SESI AUTH -->
+            <div class="paw-card rounded-xl px-3 py-2 flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                  <polyline points="9 12 11 14 15 10"></polyline>
+                </svg>
+                <span class="text-[12px] text-slate-400">Sesi Token Auth:</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-bold tracking-wider">
+                  VALID
+                </span>
+                <span class="text-[13px] font-semibold text-slate-200 tabular-nums">167h 24m</span>
+              </div>
+            </div>
+
+            <!-- 8. 3 TOMBOL AKSI UTAMA -->
+            <div class="grid grid-cols-3 gap-2 pt-0.5">
+              <!-- [Kerja Sekarang] (Biru) -->
+              <button onclick="triggerManualWork()" class="btn-cyber py-2 px-2 rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-slate-950 font-bold text-[12px] shadow-[0_0_16px_rgba(56,189,248,0.3)] flex items-center justify-center gap-1">
+                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span>Kerja</span>
+              </button>
+
+              <!-- [Jeda / Lanjut] (Merah / Hijau) -->
+              <button onclick="toggleBotPause()" id="btn-pause-a" class="btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="6" y="4" width="4" height="16"></rect>
+                  <rect x="14" y="4" width="4" height="16"></rect>
+                </svg>
+                <span>Jeda Bot</span>
+              </button>
+
+              <!-- [Log Aktivitas] (Abu-abu) -->
+              <button onclick="toggleActivityLog('a')" class="btn-cyber py-2 px-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-white/10 text-slate-200 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="4 17 10 11 4 5"></polyline>
+                  <line x1="12" y1="19" x2="20" y2="19"></line>
+                </svg>
+                <span>Log Bot</span>
+              </button>
+            </div>
+
+            <!-- Collapsible Activity Log Drawer (Surface A) -->
+            <div id="log-drawer-a" class="hidden paw-well rounded-xl p-2.5 flex-col gap-1.5 max-h-36 overflow-y-auto border border-sky-400/20">
+              <div class="flex items-center justify-between text-[12px] text-slate-400 pb-1 border-b border-white/5">
+                <span class="font-semibold text-slate-300">Log Aktivitas Terbaru</span>
+                <span class="font-mono">UTC</span>
+              </div>
+              <div id="log-entries-a" class="flex flex-col gap-1 text-[12px] font-mono">
+                <div class="text-emerald-300">[13:30:02] Auto Latih Kekuatan Lv 83 dimulai</div>
+                <div class="text-sky-300">[12:55:14] Eksekusi Kerja berhasil (-100 EN)</div>
+                <div class="text-amber-300">[12:54:50] Konsumsi 1x Roti (+10 EN)</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SURFACE B: TOOLBAR EXTENSION POPUP (Width: 360px)
+           ====================================================================== -->
+      <section id="section-surface-b" class="xl:col-span-4 flex flex-col items-center">
+        <!-- Section Label -->
+        <div class="w-[360px] max-w-full mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-indigo-500/20 border border-indigo-400/30 text-indigo-300 font-mono text-[12px] font-semibold">PERMUKAAN B</span>
+            <h2 class="text-[13px] font-semibold text-white">Toolbar Extension Popup</h2>
+          </div>
+          <span class="text-[12px] font-mono text-slate-400">360px</span>
+        </div>
+
+        <!-- Simulated Browser Toolbar Anchor -->
+        <div class="w-[360px] max-w-full flex flex-col items-end pr-5 mb-1">
+          <div class="px-2.5 py-1 rounded-t-lg bg-slate-800/90 border border-b-0 border-white/15 flex items-center gap-1.5 text-[12px] text-slate-300">
+            <svg class="w-3.5 h-3.5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+            </svg>
+            <span>Chrome / Edge Extension Toolbar</span>
+          </div>
+        </div>
+
+        <!-- TOOLBAR EXTENSION POPUP CONTAINER (360px) -->
+        <div class="w-[360px] max-w-full paw-shell rounded-2xl p-3.5 flex flex-col gap-2.5 relative overflow-hidden">
+          <div class="absolute top-0 left-6 right-6 h-[1px] bg-gradient-to-r from-transparent via-indigo-400/60 to-transparent"></div>
+
+          <!-- Header Bar Popup -->
+          <div class="flex items-center justify-between pb-2 border-b border-white/10">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-indigo-500/20 border border-indigo-400/30 flex items-center justify-center text-indigo-300">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="10" rx="2"></rect>
+                  <circle cx="12" cy="5" r="2"></circle>
+                  <path d="M12 7v4"></path>
+                  <line x1="8" y1="16" x2="8" y2="16"></line>
+                  <line x1="16" y1="16" x2="16" y2="16"></line>
+                </svg>
+              </div>
+              <div>
+                <div class="flex items-center gap-1.5">
+                  <span class="text-[13px] font-bold tracking-wider text-white uppercase">AUTO WORKER</span>
+                  <span id="panel-b-status-dot" class="w-2 h-2 rounded-full bg-emerald-400 status-dot-active"></span>
+                </div>
+                <div class="text-[12px] text-slate-400">Sinkronisasi Lintas Tab</div>
+              </div>
+            </div>
+
+            <button onclick="focusSurfaceC()" title="Pengaturan Ekstensi" class="btn-cyber px-2.5 py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-200 hover:text-sky-300 text-[12px] font-medium flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"></circle>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+              </svg>
+              <span>Pengaturan</span>
+            </button>
+          </div>
+
+          <!-- Wilayah & UTC Reset -->
+          <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <svg class="w-4 h-4 text-sky-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path>
+                  <circle cx="12" cy="10" r="3"></circle>
+                </svg>
+                <span class="text-[12px] text-slate-400">Lokasi:</span>
+                <span class="text-[13px] font-semibold text-white">Jakarta</span>
+              </div>
+              <span class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold tabular-nums">
+                +50% Regen
+              </span>
+            </div>
+
+            <div class="h-[1px] bg-white/5"></div>
+
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-indigo-400 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+                <span id="utc-clock-b" class="text-[13px] font-semibold text-slate-200 tabular-nums">13:34:20 UTC</span>
+              </div>
+              <div class="flex items-center gap-1.5">
+                <span class="text-[12px] text-slate-300 tabular-nums">Reset: 10j 41m</span>
+                <span id="flush-badge-b" class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/40 text-amber-300 text-[12px] font-bold tracking-wide tabular-nums badge-flush-pulse">
+                  FLUSH
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Pelacak Makanan (Roti) -->
+          <div class="paw-card rounded-xl p-2.5 flex items-center justify-between gap-2">
+            <div class="flex items-center gap-2">
+              <div class="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-400/25 flex items-center justify-center text-amber-300 shrink-0">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 8h1a4 4 0 0 1 0 8h-1"></path>
+                  <path d="M2 8h16v9a4 4 0 0 1-4 4H6a4 4 0 0 1-4-4V8z"></path>
+                </svg>
+              </div>
+              <div>
+                <div class="text-[12px] text-slate-400 font-medium">Kuota Roti Harian</div>
+                <div id="bread-counter-b" class="text-[13px] font-semibold text-white tabular-nums">9/20 • 11 sisa</div>
+              </div>
+            </div>
+            <div class="flex items-center gap-1">
+              <button onclick="adjustBread(-1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center">-</button>
+              <button onclick="adjustBread(1)" class="btn-cyber w-7 h-7 rounded-lg bg-slate-800 hover:bg-slate-700 border border-white/10 text-slate-200 font-mono text-[14px] font-bold flex items-center justify-center">+</button>
+              <button onclick="setBreadMax()" class="btn-cyber px-2.5 h-7 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 border border-amber-400/30 text-amber-300 font-mono text-[12px] font-semibold flex items-center justify-center">Max</button>
+            </div>
+          </div>
+
+          <!-- Kartu Live Energi -->
+          <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+            <div class="flex items-baseline justify-between">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+                <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">ENERGI</span>
+              </div>
+              <div class="flex items-baseline gap-1">
+                <span id="energy-value-b" class="text-[20px] font-bold text-white tabular-nums leading-none">44/210</span>
+                <span id="energy-pct-b" class="text-[12px] text-sky-400 font-mono tabular-nums">(21%)</span>
+              </div>
+            </div>
+            <div class="w-full h-2.5 rounded-full bg-slate-900/95 border border-white/10 overflow-hidden p-0.5">
+              <div id="energy-bar-b" class="h-full rounded-full energy-progress-fill" style="width: 21%;"></div>
+            </div>
+            <div class="flex items-center justify-between pt-0.5 text-[12px]">
+              <div class="flex items-center gap-1 text-slate-300">
+                <span class="text-slate-400">Next Work:</span>
+                <span id="next-work-b" class="font-semibold text-sky-300 tabular-nums">37m 19s</span>
+              </div>
+              <div class="flex items-center gap-1 text-slate-300">
+                <span class="text-slate-400">Full:</span>
+                <span class="font-semibold text-slate-200 tabular-nums">1j 47mnt</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Kartu Fokus Kerja -->
+          <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-2">
+            <div class="flex flex-col gap-1">
+              <span id="work-status-badge-b" class="px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold w-fit">
+                Auto Kerja: AKTIF
+              </span>
+              <div class="flex items-center gap-1.5 text-[12px] text-slate-400 mt-0.5">
+                <span>Ambang:</span>
+                <span id="work-threshold-badge-b" class="px-1.5 py-0.2 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 font-semibold tabular-nums">
+                  &gt;= 100 EN
+                </span>
+              </div>
+            </div>
+            <div class="paw-well px-3 py-1.5 rounded-xl text-right">
+              <div class="text-[12px] text-slate-400">Hitung Mundur</div>
+              <div id="work-countdown-large-b" class="text-[18px] font-bold text-white tabular-nums tracking-tight">00:37:19</div>
+            </div>
+          </div>
+
+          <!-- Kartu Latihan Stats -->
+          <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-indigo-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 20V10"></path>
+                  <path d="M12 20V4"></path>
+                  <path d="M6 20v-6"></path>
+                </svg>
+                <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">LATIHAN STATS</span>
+              </div>
+              <button onclick="toggleStatsTraining()" id="stats-toggle-badge-b" class="btn-cyber px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+                <span>AKTIF</span>
+              </button>
+            </div>
+
+            <div class="grid grid-cols-3 gap-2">
+              <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-rose-400">
+                <span class="text-[12px] font-medium text-slate-400">STR</span>
+                <span class="text-[14px] font-bold text-white tabular-nums">82</span>
+              </div>
+              <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-sky-400">
+                <span class="text-[12px] font-medium text-slate-400">EDU</span>
+                <span class="text-[14px] font-bold text-white tabular-nums">50</span>
+              </div>
+              <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between border-l-2 border-l-emerald-400">
+                <span class="text-[12px] font-medium text-slate-400">EKO</span>
+                <span class="text-[14px] font-bold text-white tabular-nums">51</span>
+              </div>
+            </div>
+
+            <div class="paw-well rounded-lg px-2.5 py-1.5 flex items-center justify-between text-[12px]">
+              <span class="font-medium text-indigo-300">Latih Kekuatan Lv 83</span>
+              <span class="font-semibold text-white tabular-nums">1j 13m</span>
+            </div>
+          </div>
+
+          <!-- Baris Sesi Auth -->
+          <div class="paw-card rounded-xl px-3 py-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                <polyline points="9 12 11 14 15 10"></polyline>
+              </svg>
+              <span class="text-[12px] text-slate-400">Sesi Token Auth:</span>
+            </div>
+            <div class="flex items-center gap-2">
+              <span class="px-2 py-0.5 rounded bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-bold tracking-wider">VALID</span>
+              <span class="text-[13px] font-semibold text-slate-200 tabular-nums">167h 24m</span>
+            </div>
+          </div>
+
+          <!-- 3 Tombol Aksi Utama -->
+          <div class="grid grid-cols-3 gap-2">
+            <button onclick="triggerManualWork()" class="btn-cyber py-2 px-2 rounded-xl bg-gradient-to-b from-sky-500 to-sky-600 hover:from-sky-400 hover:to-sky-500 text-slate-950 font-bold text-[12px] shadow-[0_0_16px_rgba(56,189,248,0.3)] flex items-center justify-center gap-1">
+              <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span>Kerja</span>
+            </button>
+            <button onclick="toggleBotPause()" id="btn-pause-b" class="btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+              <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="6" y="4" width="4" height="16"></rect>
+                <rect x="14" y="4" width="4" height="16"></rect>
+              </svg>
+              <span>Jeda Bot</span>
+            </button>
+            <button onclick="toggleActivityLog('b')" class="btn-cyber py-2 px-2 rounded-xl bg-slate-800/90 hover:bg-slate-700/90 border border-white/10 text-slate-200 font-semibold text-[12px] flex items-center justify-center gap-1.5">
+              <svg class="w-3.5 h-3.5 shrink-0 text-slate-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="4 17 10 11 4 5"></polyline>
+                <line x1="12" y1="19" x2="20" y2="19"></line>
+              </svg>
+              <span>Log Bot</span>
+            </button>
+          </div>
+
+          <!-- Extra Button: [Buka Tab Dashboard Game] -->
+          <button onclick="showToast('Membuka & memfokuskan Tab Dashboard Game Parlementum...', 'sky')" class="btn-cyber w-full py-2.5 px-3 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-400/35 text-indigo-200 font-semibold text-[12px] flex items-center justify-center gap-2">
+            <span>Buka Tab Dashboard Game</span>
+            <svg class="w-4 h-4 text-indigo-300" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+              <polyline points="15 3 21 3 21 9"></polyline>
+              <line x1="10" y1="14" x2="21" y2="3"></line>
+            </svg>
+          </button>
+
+          <!-- Footer Popup: Indikator Koneksi & Versi -->
+          <div class="pt-2 border-t border-white/10 flex items-center justify-between text-[12px]">
+            <div class="flex items-center gap-2 text-slate-300">
+              <span class="w-2 h-2 rounded-full bg-emerald-400 status-dot-active"></span>
+              <span>Tab game aktif (2 tab)</span>
+            </div>
+            <span class="font-mono text-slate-400 tabular-nums">v5.12.0</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ======================================================================
+           SURFACE C: SETTINGS MODAL (MENU PENGATURAN BERTAB - 5 TABS)
+           ====================================================================== -->
+      <section id="section-surface-c" class="xl:col-span-4 flex flex-col items-center w-full">
+        <!-- Section Label -->
+        <div class="w-full max-w-[600px] mb-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-400/30 text-emerald-300 font-mono text-[12px] font-semibold">PERMUKAAN C</span>
+            <h2 class="text-[13px] font-semibold text-white">Settings Modal (5 Tab)</h2>
+          </div>
+          <span class="text-[12px] font-mono text-slate-400">5-Tab Modular</span>
+        </div>
+
+        <!-- SETTINGS MODAL SHELL -->
+        <div class="w-full max-w-[600px] paw-shell rounded-2xl overflow-hidden flex flex-col relative">
+          <div class="absolute top-0 left-8 right-8 h-[1px] bg-gradient-to-r from-transparent via-sky-400/70 to-transparent"></div>
+
+          <!-- Modal Header -->
+          <div class="px-4 py-3.5 border-b border-white/10 flex items-center justify-between bg-slate-900/50">
+            <div class="flex items-center gap-2.5">
+              <div class="w-8 h-8 rounded-xl bg-sky-500/15 border border-sky-400/30 flex items-center justify-center text-sky-400">
+                <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="4" y1="21" x2="4" y2="14"></line>
+                  <line x1="4" y1="10" x2="4" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12" y2="3"></line>
+                  <line x1="20" y1="21" x2="20" y2="16"></line>
+                  <line x1="20" y1="12" x2="20" y2="3"></line>
+                  <line x1="1" y1="14" x2="7" y2="14"></line>
+                  <line x1="9" y1="8" x2="15" y2="8"></line>
+                  <line x1="17" y1="16" x2="23" y2="16"></line>
+                </svg>
+              </div>
+              <div>
+                <h3 class="text-[14px] font-bold tracking-wide text-white uppercase">Pengaturan Auto Worker</h3>
+                <p class="text-[12px] text-slate-400">Konfigurasi Otomasi, Kalkulator Emas &amp; Keamanan Bot</p>
+              </div>
+            </div>
+            <span class="px-2.5 py-1 rounded-lg bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold">
+              Auto-Save Aktif
+            </span>
+          </div>
+
+          <!-- 5-Tab Navigation Bar -->
+          <div class="px-3 pt-2.5 pb-2 bg-slate-950/60 border-b border-white/10 grid grid-cols-5 gap-1">
+            <!-- Tab 1: Kerja & Energi -->
+            <button onclick="switchSettingsTab(1)" id="tab-btn-1" class="btn-cyber py-2 px-1.5 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+              </svg>
+              <span class="text-[12px] font-semibold leading-tight">Kerja</span>
+            </button>
+
+            <!-- Tab 2: Latihan & Kalkulator -->
+            <button onclick="switchSettingsTab(2)" id="tab-btn-2" class="btn-cyber py-2 px-1.5 rounded-xl bg-transparent hover:bg-white/5 border border-transparent text-slate-400 hover:text-slate-200 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 20V10"></path>
+                <path d="M12 20V4"></path>
+                <path d="M6 20v-6"></path>
+              </svg>
+              <span class="text-[12px] font-medium leading-tight">Stats &amp; Emas</span>
+            </button>
+
+            <!-- Tab 3: Stealth & Jadwal -->
+            <button onclick="switchSettingsTab(3)" id="tab-btn-3" class="btn-cyber py-2 px-1.5 rounded-xl bg-transparent hover:bg-white/5 border border-transparent text-slate-400 hover:text-slate-200 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span class="text-[12px] font-medium leading-tight">Stealth</span>
+            </button>
+
+            <!-- Tab 4: Notifikasi & Suara -->
+            <button onclick="switchSettingsTab(4)" id="tab-btn-4" class="btn-cyber py-2 px-1.5 rounded-xl bg-transparent hover:bg-white/5 border border-transparent text-slate-400 hover:text-slate-200 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                <path d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+                <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+              </svg>
+              <span class="text-[12px] font-medium leading-tight">Suara</span>
+            </button>
+
+            <!-- Tab 5: Tampilan & Pintasan -->
+            <button onclick="switchSettingsTab(5)" id="tab-btn-5" class="btn-cyber py-2 px-1.5 rounded-xl bg-transparent hover:bg-white/5 border border-transparent text-slate-400 hover:text-slate-200 flex flex-col items-center justify-center gap-1 text-center">
+              <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="2" y="4" width="20" height="16" rx="2" ry="2"></rect>
+                <path d="M6 8h.001"></path>
+                <path d="M10 8h.001"></path>
+                <path d="M14 8h.001"></path>
+                <path d="M18 8h.001"></path>
+                <path d="M8 12h.001"></path>
+                <path d="M12 12h.001"></path>
+                <path d="M16 12h.001"></path>
+                <path d="M7 16h10"></path>
+              </svg>
+              <span class="text-[12px] font-medium leading-tight">Pintasan</span>
+            </button>
+          </div>
+
+          <!-- ================================================================
+               TAB CONTENT PANELS
+               ================================================================ -->
+          <div class="p-4 flex flex-col gap-3.5">
+
+            <!-- --------------------------------------------------------------
+                 TAB 1: KERJA & ENERGI
+                 -------------------------------------------------------------- -->
+            <div id="settings-tab-1" class="flex flex-col gap-3">
+              <!-- Slider Ambang Batas Energi (10 - 200 EN) + Preset Chips -->
+              <div class="paw-card rounded-xl p-3.5 flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <div class="text-[13px] font-semibold text-white">Ambang Batas Energi Kerja</div>
+                    <div class="text-[12px] text-slate-400">Bot mengeksekusi kerja saat energi mencapai batas ini</div>
+                  </div>
+                  <span id="slider-energy-readout" class="px-2.5 py-1 rounded-lg bg-sky-500/20 border border-sky-400/40 text-sky-300 font-bold text-[14px] tabular-nums">
+                    100 EN
+                  </span>
+                </div>
+
+                <input
+                  id="energy-threshold-slider"
+                  type="range"
+                  min="10"
+                  max="210"
+                  step="5"
+                  value="100"
+                  oninput="updateEnergyThreshold(this.value)"
+                  class="paw-slider"
+                />
+
+                <!-- Preset Chips: 10, 20, 50, 100, Max -->
+                <div class="grid grid-cols-5 gap-1.5 pt-0.5">
+                  <button onclick="updateEnergyThreshold(10)" class="preset-chip btn-cyber py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-300 font-mono text-[12px] font-semibold tabular-nums">10</button>
+                  <button onclick="updateEnergyThreshold(20)" class="preset-chip btn-cyber py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-300 font-mono text-[12px] font-semibold tabular-nums">20</button>
+                  <button onclick="updateEnergyThreshold(50)" class="preset-chip btn-cyber py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-300 font-mono text-[12px] font-semibold tabular-nums">50</button>
+                  <button onclick="updateEnergyThreshold(100)" class="preset-chip btn-cyber py-1.5 rounded-lg bg-sky-500/25 border border-sky-400/50 text-sky-300 font-mono text-[12px] font-bold tabular-nums">100</button>
+                  <button onclick="updateEnergyThreshold(210)" class="preset-chip btn-cyber py-1.5 rounded-lg bg-slate-800/90 hover:bg-slate-700 border border-white/10 text-slate-300 font-mono text-[12px] font-semibold">Max (210)</button>
+                </div>
+              </div>
+
+              <!-- Sakelar Kuota Roti (10 vs 20 Slot) -->
+              <div class="paw-card rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Kapasitas Kuota Roti Harian</div>
+                  <div class="text-[12px] text-slate-400">Sesuaikan dengan status akun standar (10) atau premium (20)</div>
+                </div>
+                <div class="flex items-center bg-slate-900 p-1 rounded-xl border border-white/10 shrink-0">
+                  <button onclick="setMaxBreadCapacity(10)" id="bread-cap-10" class="btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-semibold text-slate-400">10 Slot</button>
+                  <button onclick="setMaxBreadCapacity(20)" id="bread-cap-20" class="btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30">20 Slot</button>
+                </div>
+              </div>
+
+              <!-- Pengingat Reset Roti -->
+              <div class="paw-card rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Pengingat Kuota Roti Sebelum Reset</div>
+                  <div class="text-[12px] text-slate-400">Tampilkan peringatan jika kuota roti tersisa 30 menit sebelum 00:00 UTC</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <!-- Sakelar Energy Flush Akhir Hari -->
+              <div class="paw-card rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[13px] font-semibold text-white">Energy Flush Akhir Hari</span>
+                    <span class="px-1.5 py-0.5 rounded bg-amber-500/20 border border-amber-400/30 text-amber-300 text-[12px] font-bold">FLUSH</span>
+                  </div>
+                  <div class="text-[12px] text-slate-400">Kuras sisa energi otomatis mendekati reset harian server</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- --------------------------------------------------------------
+                 TAB 2: LATIHAN STATS & KALKULATOR BIAYA EMAS REAL-TIME
+                 -------------------------------------------------------------- -->
+            <div id="settings-tab-2" class="hidden flex-col gap-3">
+              <!-- Baris Master Auto Latihan + Dropdown Fokus Prioritas -->
+              <div class="paw-card rounded-xl p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="flex items-center justify-between sm:justify-start gap-3">
+                  <div>
+                    <div class="text-[13px] font-semibold text-white">Auto Latihan Stats</div>
+                    <div class="text-[12px] text-slate-400">Latih karakter otomatis saat cooldown selesai</div>
+                  </div>
+                  <button onclick="toggleStatsTraining()" id="settings-stats-master-switch" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                  </button>
+                </div>
+
+                <!-- Dropdown Fokus Prioritas -->
+                <div class="flex flex-col gap-1">
+                  <label class="text-[12px] text-slate-400 font-medium">Fokus Prioritas Latihan:</label>
+                  <select onchange="showToast('Prioritas latihan diubah ke: ' + this.value, 'sky')" class="bg-slate-900 border border-white/15 rounded-lg px-2.5 py-1.5 text-[12px] font-semibold text-sky-300 focus:outline-none focus:border-sky-400">
+                    <option value="Pendidikan Dulu">Pendidikan Dulu (EDU)</option>
+                    <option value="Ekonomi Dulu">Ekonomi Dulu (EKO)</option>
+                    <option value="Kekuatan Dulu" selected>Kekuatan Dulu (STR)</option>
+                    <option value="Seimbang">Seimbang (Balanced)</option>
+                  </select>
+                </div>
+              </div>
+
+              <!-- 3 Kolom Kartu Stat (Kekuatan, Pendidikan, Ekonomi) -->
+              <div class="grid grid-cols-3 gap-2.5">
+                <!-- Stat 1: Kekuatan (STR) -->
+                <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2 border-t-2 border-t-rose-400/70">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[12px] font-bold text-rose-300 uppercase">Kekuatan</span>
+                    <svg class="w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M6.5 6.5 17.5 17.5"></path>
+                      <path d="M3 10l7-7"></path>
+                      <path d="M14 21l7-7"></path>
+                      <path d="M2 6l4-4"></path>
+                      <path d="M18 22l4-4"></path>
+                    </svg>
+                  </div>
+                  <div class="paw-well rounded-lg px-2 py-1 flex items-center justify-between">
+                    <span class="text-[12px] text-slate-400">Saat Ini</span>
+                    <span class="text-[13px] font-bold text-white tabular-nums">Lv 82</span>
+                  </div>
+                  <div>
+                    <label class="text-[12px] text-slate-400 block mb-1">Target Level</label>
+                    <input
+                      id="target-str"
+                      type="number"
+                      min="82"
+                      max="250"
+                      value="100"
+                      oninput="calculateGoldCosts()"
+                      class="w-full bg-slate-900 border border-white/15 focus:border-sky-400 rounded-lg px-2 py-1 text-[14px] font-bold text-white tabular-nums focus:outline-none"
+                    />
+                  </div>
+                  <div class="text-[12px] text-slate-400 flex items-center justify-between pt-0.5 border-t border-white/5">
+                    <span>Biaya:</span>
+                    <span id="cost-str-display" class="font-mono font-semibold text-amber-300 tabular-nums">819 Emas</span>
+                  </div>
+                </div>
+
+                <!-- Stat 2: Pendidikan (EDU) -->
+                <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2 border-t-2 border-t-sky-400/70">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[12px] font-bold text-sky-300 uppercase">Pendidikan</span>
+                    <svg class="w-4 h-4 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+                      <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+                    </svg>
+                  </div>
+                  <div class="paw-well rounded-lg px-2 py-1 flex items-center justify-between">
+                    <span class="text-[12px] text-slate-400">Saat Ini</span>
+                    <span class="text-[13px] font-bold text-white tabular-nums">Lv 50</span>
+                  </div>
+                  <div>
+                    <label class="text-[12px] text-slate-400 block mb-1">Target Level</label>
+                    <input
+                      id="target-edu"
+                      type="number"
+                      min="50"
+                      max="250"
+                      value="100"
+                      oninput="calculateGoldCosts()"
+                      class="w-full bg-slate-900 border border-white/15 focus:border-sky-400 rounded-lg px-2 py-1 text-[14px] font-bold text-white tabular-nums focus:outline-none"
+                    />
+                  </div>
+                  <div class="text-[12px] text-slate-400 flex items-center justify-between pt-0.5 border-t border-white/5">
+                    <span>Biaya:</span>
+                    <span id="cost-edu-display" class="font-mono font-semibold text-amber-300 tabular-nums">1.875 Emas</span>
+                  </div>
+                </div>
+
+                <!-- Stat 3: Ekonomi (EKO) -->
+                <div class="paw-card rounded-xl p-2.5 flex flex-col gap-2 border-t-2 border-t-emerald-400/70">
+                  <div class="flex items-center justify-between">
+                    <span class="text-[12px] font-bold text-emerald-300 uppercase">Ekonomi</span>
+                    <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <line x1="12" y1="1" x2="12" y2="23"></line>
+                      <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                  </div>
+                  <div class="paw-well rounded-lg px-2 py-1 flex items-center justify-between">
+                    <span class="text-[12px] text-slate-400">Saat Ini</span>
+                    <span class="text-[13px] font-bold text-white tabular-nums">Lv 51</span>
+                  </div>
+                  <div>
+                    <label class="text-[12px] text-slate-400 block mb-1">Target Level</label>
+                    <input
+                      id="target-eko"
+                      type="number"
+                      min="51"
+                      max="250"
+                      value="100"
+                      oninput="calculateGoldCosts()"
+                      class="w-full bg-slate-900 border border-white/15 focus:border-sky-400 rounded-lg px-2 py-1 text-[14px] font-bold text-white tabular-nums focus:outline-none"
+                    />
+                  </div>
+                  <div class="text-[12px] text-slate-400 flex items-center justify-between pt-0.5 border-t border-white/5">
+                    <span>Biaya:</span>
+                    <span id="cost-eko-display" class="font-mono font-semibold text-amber-300 tabular-nums">1.850 Emas</span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- KALKULATOR BIAYA EMAS REAL-TIME -->
+              <div class="paw-card rounded-xl p-3.5 border border-amber-400/25 flex flex-col gap-2.5">
+                <div class="flex items-center justify-between border-b border-white/10 pb-2">
+                  <div class="flex items-center gap-2">
+                    <svg class="w-4 h-4 text-amber-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="4" y="2" width="16" height="20" rx="2"></rect>
+                      <line x1="8" y1="6" x2="16" y2="6"></line>
+                      <line x1="16" y1="14" x2="16" y2="18"></line>
+                      <path d="M16 10h.01"></path>
+                      <path d="M12 10h.01"></path>
+                      <path d="M8 10h.01"></path>
+                      <path d="M12 14h.01"></path>
+                      <path d="M8 14h.01"></path>
+                      <path d="M12 18h.01"></path>
+                      <path d="M8 18h.01"></path>
+                    </svg>
+                    <span class="text-[12px] font-bold tracking-wider uppercase text-amber-300">Kalkulator Biaya Emas Real-Time</span>
+                  </div>
+
+                  <!-- Status Kelayakan Keuangan ("AMAN" atau "Kurang X Emas") -->
+                  <span id="finance-status-badge" class="px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/40 text-rose-300 text-[12px] font-bold tabular-nums">
+                    Kurang 63 Emas
+                  </span>
+                </div>
+
+                <!-- Grid Saldo Dompet & Batas Cadangan Minimal -->
+                <div class="grid grid-cols-2 gap-2.5">
+                  <div class="paw-well rounded-lg p-2">
+                    <label class="text-[12px] text-slate-400 block mb-1">Saldo Dompet Emas Saat Ini</label>
+                    <div class="flex items-center gap-1.5">
+                      <input
+                        id="wallet-gold-input"
+                        type="number"
+                        min="0"
+                        value="4531"
+                        oninput="calculateGoldCosts()"
+                        class="w-full bg-slate-900/90 border border-white/10 rounded px-2 py-1 text-[14px] font-bold text-amber-300 tabular-nums focus:outline-none focus:border-amber-400"
+                      />
+                      <span class="text-[12px] text-slate-400 font-mono">Emas</span>
+                    </div>
+                  </div>
+
+                  <div class="paw-well rounded-lg p-2">
+                    <label class="text-[12px] text-slate-400 block mb-1">Batas Cadangan Minimal</label>
+                    <div class="flex items-center gap-1.5">
+                      <input
+                        id="reserve-gold-input"
+                        type="number"
+                        min="0"
+                        value="50"
+                        oninput="calculateGoldCosts()"
+                        class="w-full bg-slate-900/90 border border-white/10 rounded px-2 py-1 text-[14px] font-bold text-slate-200 tabular-nums focus:outline-none focus:border-sky-400"
+                      />
+                      <span class="text-[12px] text-slate-400 font-mono">Emas</span>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Ringkasan Total Emas Dibutuhkan vs Saldo Efektif -->
+                <div class="paw-well rounded-lg px-3 py-2 flex items-center justify-between">
+                  <div>
+                    <div class="text-[12px] text-slate-400">Total Emas Dibutuhkan (3 Stat)</div>
+                    <div id="total-gold-needed" class="text-[16px] font-bold text-white tabular-nums">4.544 Emas</div>
+                  </div>
+                  <div class="text-right">
+                    <div class="text-[12px] text-slate-400">Saldo Siap Pakai (-Cadangan)</div>
+                    <div id="usable-gold-readout" class="text-[14px] font-semibold text-amber-300 tabular-nums">4.481 Emas</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- --------------------------------------------------------------
+                 TAB 3: STEALTH & JADWAL
+                 -------------------------------------------------------------- -->
+            <div id="settings-tab-3" class="hidden flex-col gap-3">
+              <!-- Sakelar Acak Jitter (±2 EN) -->
+              <div class="paw-card rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-[13px] font-semibold text-white">Acak Jitter Ambang Energi</span>
+                    <span class="px-2 py-0.5 rounded bg-sky-500/15 border border-sky-400/30 text-sky-300 font-mono text-[12px] font-semibold">±2 EN</span>
+                  </div>
+                  <div class="text-[12px] text-slate-400 mt-0.5">Variasikan eksekusi kerja (misal 98–102 EN) agar menyerupai pola manusia</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <!-- Sakelar Jadwal Istirahat Malam -->
+              <div class="paw-card rounded-xl p-3.5 flex flex-col gap-3">
+                <div class="flex items-center justify-between gap-3">
+                  <div>
+                    <div class="text-[13px] font-semibold text-white">Jadwal Istirahat Malam (Sleep Mode)</div>
+                    <div class="text-[12px] text-slate-400">Hentikan aktivitas bot otomatis pada jam tidur yang ditentukan</div>
+                  </div>
+                  <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                    <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                  </button>
+                </div>
+
+                <div class="grid grid-cols-2 gap-2.5 pt-1 border-t border-white/10">
+                  <div class="paw-well rounded-lg p-2">
+                    <label class="text-[12px] text-slate-400 block mb-1">Jam Mulai Istirahat</label>
+                    <input type="time" value="23:30" class="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-[13px] font-mono text-white tabular-nums focus:outline-none focus:border-sky-400" />
+                  </div>
+                  <div class="paw-well rounded-lg p-2">
+                    <label class="text-[12px] text-slate-400 block mb-1">Jam Bangun Aktif</label>
+                    <input type="time" value="05:45" class="w-full bg-slate-900 border border-white/10 rounded px-2 py-1 text-[13px] font-mono text-white tabular-nums focus:outline-none focus:border-sky-400" />
+                  </div>
+                </div>
+              </div>
+
+              <!-- Peredam Log Energi Rendah -->
+              <div class="paw-card rounded-xl p-3.5 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Peredam Log Energi Rendah</div>
+                  <div class="text-[12px] text-slate-400">Sembunyikan baris log rutin saat energi masih di bawah target kerja</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+            </div>
+
+            <!-- --------------------------------------------------------------
+                 TAB 4: NOTIFIKASI & SUARA
+                 -------------------------------------------------------------- -->
+            <div id="settings-tab-4" class="hidden flex-col gap-2.5">
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Notifikasi Desktop Browser</div>
+                  <div class="text-[12px] text-slate-400">Kirim banner notifikasi OS saat kerja atau latihan selesai</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Alert Energi Penuh (Full Cap)</div>
+                  <div class="text-[12px] text-slate-400">Peringatan visual saat energi mencapai batas maksimum 210/210</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Efek Audio Eksekusi Kerja</div>
+                  <div class="text-[12px] text-slate-400">Bunyikan nada lembut saat bot berhasil mengeksekusi kerja</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Alarm Suara Energi Penuh</div>
+                  <div class="text-[12px] text-slate-400">Bunyikan synthesizer alarm jika bot dijeda dan energi penuh</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-slate-800 border border-white/15 p-0.5 flex items-center justify-start transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-slate-400 shadow"></span>
+                </button>
+              </div>
+
+              <!-- Volume Slider (0-100%) + Test Sound Button -->
+              <div class="paw-card rounded-xl p-3.5 flex flex-col gap-2.5">
+                <div class="flex items-center justify-between">
+                  <span class="text-[13px] font-semibold text-white">Volume Master Efek Suara</span>
+                  <span id="volume-readout" class="text-[13px] font-bold text-sky-300 tabular-nums">75%</span>
+                </div>
+                <div class="flex items-center gap-3">
+                  <input
+                    id="sound-volume-slider"
+                    type="range"
+                    min="0"
+                    max="100"
+                    value="75"
+                    oninput="document.getElementById('volume-readout').textContent = this.value + '%'"
+                    class="paw-slider flex-1"
+                  />
+                  <button onclick="playCyberTestSound()" class="btn-cyber px-3 py-1.5 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 border border-sky-400/40 text-sky-300 font-semibold text-[12px] flex items-center gap-1.5 shrink-0">
+                    <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                      <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+                      <path d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+                    </svg>
+                    <span>Test Sound</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- --------------------------------------------------------------
+                 TAB 5: TAMPILAN & PINTASAN KEYBOARD
+                 -------------------------------------------------------------- -->
+            <div id="settings-tab-5" class="hidden flex-col gap-2.5">
+              <!-- Opsi Panel Dashboard-Only & Multi-Tab Leader-Only -->
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Panel Hanya di Halaman Dashboard</div>
+                  <div class="text-[12px] text-slate-400">Sembunyikan floating panel saat membuka halaman pasar atau profil</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-slate-800 border border-white/15 p-0.5 flex items-center justify-start transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-slate-400 shadow"></span>
+                </button>
+              </div>
+
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Eksekusi Multi-Tab Leader-Only</div>
+                  <div class="text-[12px] text-slate-400">Cegah bentrok request saat membuka banyak tab Parlementum sekaligus</div>
+                </div>
+                <button onclick="toggleSwitch(this)" class="w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0">
+                  <span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>
+                </button>
+              </div>
+
+              <!-- Reset Posisi Panel -->
+              <div class="paw-card rounded-xl p-3 flex items-center justify-between gap-3">
+                <div>
+                  <div class="text-[13px] font-semibold text-white">Koordinat Floating Panel</div>
+                  <div class="text-[12px] text-slate-400">Kembalikan panel ke sudut kanan atas layar monitor</div>
+                </div>
+                <button onclick="showToast('Koordinat posisi panel dikembalikan ke default (Top-Right 24px)', 'sky')" class="btn-cyber px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 border border-white/15 text-slate-200 font-semibold text-[12px] shrink-0">
+                  Reset Posisi Panel
+                </button>
+              </div>
+
+              <!-- Kustomisasi Hotkey Pintasan Keyboard -->
+              <div class="paw-card rounded-xl p-3 flex flex-col gap-2">
+                <div class="flex items-center justify-between pb-1 border-b border-white/10">
+                  <span class="text-[12px] font-bold tracking-wider uppercase text-slate-300">Pintasan Keyboard (Klik untuk Ubah)</span>
+                  <span class="text-[12px] text-sky-400">Global Hotkeys</span>
+                </div>
+
+                <div class="flex flex-col gap-1.5 text-[12px]">
+                  <div class="flex items-center justify-between py-1">
+                    <span class="text-slate-300">Sembunyikan / Tampilkan Panel</span>
+                    <button onclick="recordHotkey(this)" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 hover:border-sky-400 text-sky-300 font-mono font-semibold tabular-nums">Alt + H</button>
+                  </div>
+                  <div class="flex items-center justify-between py-1">
+                    <span class="text-slate-300">Eksekusi Kerja Sekarang</span>
+                    <button onclick="recordHotkey(this)" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 hover:border-sky-400 text-sky-300 font-mono font-semibold tabular-nums">Alt + W</button>
+                  </div>
+                  <div class="flex items-center justify-between py-1">
+                    <span class="text-slate-300">Jeda / Lanjutkan Bot</span>
+                    <button onclick="recordHotkey(this)" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 hover:border-sky-400 text-sky-300 font-mono font-semibold tabular-nums">Alt + P</button>
+                  </div>
+                  <div class="flex items-center justify-between py-1">
+                    <span class="text-slate-300">Buka Log Aktivitas</span>
+                    <button onclick="recordHotkey(this)" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 hover:border-sky-400 text-sky-300 font-mono font-semibold tabular-nums">Alt + L</button>
+                  </div>
+                  <div class="flex items-center justify-between py-1">
+                    <span class="text-slate-300">Buka Menu Pengaturan</span>
+                    <button onclick="recordHotkey(this)" class="px-2.5 py-1 rounded-lg bg-slate-900 border border-white/15 hover:border-sky-400 text-sky-300 font-mono font-semibold tabular-nums">Alt + S</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </section>
+
+    </div>
+
+    <!-- ========================================================================
+         ARCHITECTURAL & CSS DESIGN SPECIFICATION SUMMARY
+         ======================================================================== -->
+    <section class="mt-10 paw-shell rounded-2xl p-5 border border-white/10">
+      <div class="flex items-center gap-2.5 pb-3 mb-4 border-b border-white/10">
+        <svg class="w-5 h-5 text-sky-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="16 18 22 12 16 6"></polyline>
+          <polyline points="8 6 2 12 8 18"></polyline>
+        </svg>
+        <h2 class="text-[14px] font-bold tracking-wider uppercase text-white">Rekomendasi Arsitektur Visual &amp; Spesifikasi CSS</h2>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="paw-card rounded-xl p-3.5">
+          <h3 class="text-[13px] font-bold text-sky-300 mb-1.5">1. Palet Warna &amp; Glassmorphism</h3>
+          <p class="text-[12px] text-slate-300 leading-relaxed">
+            Menggunakan kanvas dasar <code class="text-sky-300 font-mono">#0a0e1a</code> dengan kartu modular <code class="text-sky-300 font-mono">rgba(22, 27, 42, 0.75)</code>, <code class="text-sky-300 font-mono">backdrop-filter: blur(16px)</code>, serta garis tepi <code class="text-sky-300 font-mono">1px solid rgba(255,255,255,0.08)</code> yang menyala sian saat di-hover.
+          </p>
+        </div>
+
+        <div class="paw-card rounded-xl p-3.5">
+          <h3 class="text-[13px] font-bold text-indigo-300 mb-1.5">2. Tipografi Anti-Getar (Tabular-Nums)</h3>
+          <p class="text-[12px] text-slate-300 leading-relaxed">
+            Seluruh teks body minimal <code class="text-indigo-300 font-mono">12px</code> dan angka metrik <code class="text-indigo-300 font-mono">13px–20px</code> dengan <code class="text-indigo-300 font-mono">font-variant-numeric: tabular-nums</code> pada JetBrains Mono agar detik timer hitung mundur tidak pernah bergeser secara horizontal.
+          </p>
+        </div>
+
+        <div class="paw-card rounded-xl p-3.5">
+          <h3 class="text-[13px] font-bold text-emerald-300 mb-1.5">3. Ikonografi Vektor Murni (Zero-Emoji)</h3>
+          <p class="text-[12px] text-slate-300 leading-relaxed">
+            Seluruh indikator menggunakan SVG garis vektor bergaya Lucide/Feather (<code class="text-emerald-300 font-mono">stroke-width: 1.75px</code>) dengan titik status CSS berdenyut (<code class="text-emerald-300 font-mono">pulseRing</code>) yang tajam di semua resolusi monitor.
+          </p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- ==========================================================================
+       INTERACTIVE PROTOTYPE LOGIC & REAL-TIME TELEMETRY SCRIPT
+       ========================================================================== -->
+  <script>
+    // Central Synchronized Extension State
+    const botState = {
+      isPaused: false,
+      isPinned: true,
+      isPillMode: false,
+      isFlushNear: true,
+      statsTrainingActive: true,
+      energyCurrent: 44,
+      energyMax: 210,
+      energyThreshold: 100,
+      breadUsed: 9,
+      breadMax: 20,
+      countdownSeconds: 37 * 60 + 19, // 37m 19s
+      currentStats: { str: 82, edu: 50, eko: 51 }
+    };
+
+    // Toast Notification Helper (Replaces native alert)
+    function showToast(message, variant = 'sky') {
+      const container = document.getElementById('toast-container');
+      const toast = document.createElement('div');
+      const colorMap = {
+        sky: 'border-sky-400/40 bg-slate-900/95 text-sky-200',
+        emerald: 'border-emerald-400/40 bg-slate-900/95 text-emerald-200',
+        amber: 'border-amber-400/40 bg-slate-900/95 text-amber-200',
+        rose: 'border-rose-400/40 bg-slate-900/95 text-rose-200',
+        info: 'border-white/20 bg-slate-900/95 text-slate-200'
+      };
+
+      toast.className = `px-3.5 py-2.5 rounded-xl border shadow-2xl backdrop-blur-xl text-[12px] font-medium flex items-center gap-2 transition-all duration-300 ${colorMap[variant] || colorMap.sky}`;
+      toast.innerHTML = `
+        <span class="w-2 h-2 rounded-full bg-current shrink-0"></span>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.style.opacity = '0';
+        toast.style.transform = 'translateY(6px)';
+        setTimeout(() => toast.remove(), 250);
+      }, 2800);
+    }
+
+    // Live UTC Clock & Countdown Ticker
+    function updateClocksAndTimers() {
+      const now = new Date();
+      const hh = String(now.getUTCHours()).padStart(2, '0');
+      const mm = String(now.getUTCMinutes()).padStart(2, '0');
+      const ss = String(now.getUTCSeconds()).padStart(2, '0');
+      const utcString = `${hh}:${mm}:${ss} UTC`;
+
+      document.getElementById('utc-clock-a').textContent = utcString;
+      document.getElementById('utc-clock-b').textContent = utcString;
+
+      if (!botState.isPaused && botState.countdownSeconds > 0) {
+        botState.countdownSeconds--;
+      }
+
+      const mins = Math.floor(botState.countdownSeconds / 60);
+      const secs = botState.countdownSeconds % 60;
+      const shortCountdown = `${mins}m ${String(secs).padStart(2, '0')}s`;
+      const fullCountdown = `00:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+
+      document.getElementById('next-work-a').textContent = shortCountdown;
+      document.getElementById('next-work-b').textContent = shortCountdown;
+      document.getElementById('work-countdown-large-a').textContent = fullCountdown;
+      document.getElementById('work-countdown-large-b').textContent = fullCountdown;
+      document.getElementById('pill-countdown-text').textContent = `${mins}m`;
+    }
+
+    setInterval(updateClocksAndTimers, 1000);
+
+    // Synchronize Bread Quota UI across Surface A and Surface B
+    function renderBreadQuota() {
+      const remaining = Math.max(0, botState.breadMax - botState.breadUsed);
+      const text = `${botState.breadUsed}/${botState.breadMax} • ${remaining} sisa`;
+      document.getElementById('bread-counter-a').textContent = text;
+      document.getElementById('bread-counter-b').textContent = text;
+    }
+
+    function adjustBread(delta) {
+      botState.breadUsed = Math.min(botState.breadMax, Math.max(0, botState.breadUsed + delta));
+      renderBreadQuota();
+      showToast(`Kuota roti diperbarui: ${botState.breadUsed}/${botState.breadMax}`, 'amber');
+    }
+
+    function setBreadMax() {
+      botState.breadUsed = botState.breadMax;
+      renderBreadQuota();
+      showToast(`Kuota roti disetel penuh (${botState.breadMax}/${botState.breadMax})`, 'amber');
+    }
+
+    function setMaxBreadCapacity(cap) {
+      botState.breadMax = cap;
+      if (botState.breadUsed > cap) botState.breadUsed = cap;
+      renderBreadQuota();
+
+      const btn10 = document.getElementById('bread-cap-10');
+      const btn20 = document.getElementById('bread-cap-20');
+      if (cap === 10) {
+        btn10.className = 'btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30';
+        btn20.className = 'btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-semibold text-slate-400';
+      } else {
+        btn20.className = 'btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-400/30';
+        btn10.className = 'btn-cyber px-3 py-1 rounded-lg text-[12px] font-mono font-semibold text-slate-400';
+      }
+      showToast(`Kapasitas kuota roti diubah ke ${cap} slot`, 'amber');
+    }
+
+    // Synchronize Energy Readout & Progress Bar
+    function renderEnergy() {
+      const pct = Math.min(100, Math.round((botState.energyCurrent / botState.energyMax) * 100));
+      const text = `${botState.energyCurrent}/${botState.energyMax}`;
+
+      document.getElementById('energy-value-a').textContent = text;
+      document.getElementById('energy-value-b').textContent = text;
+      document.getElementById('pill-energy-text').textContent = text;
+
+      document.getElementById('energy-pct-a').textContent = `(${pct}%)`;
+      document.getElementById('energy-pct-b').textContent = `(${pct}%)`;
+
+      document.getElementById('energy-bar-a').style.width = `${pct}%`;
+      document.getElementById('energy-bar-b').style.width = `${pct}%`;
+    }
+
+    function simulateEnergyGain(amount) {
+      botState.energyCurrent = Math.min(botState.energyMax, botState.energyCurrent + amount);
+      renderEnergy();
+      showToast(`Simulasi regenerasi energi: +${amount} EN (${botState.energyCurrent}/${botState.energyMax})`, 'sky');
+    }
+
+    function triggerManualWork() {
+      if (botState.energyCurrent < 10) {
+        showToast('Energi tidak mencukupi untuk kerja sekarang!', 'rose');
+        return;
+      }
+      botState.energyCurrent = Math.max(0, botState.energyCurrent - Math.min(botState.energyCurrent, 20));
+      renderEnergy();
+      prependLogEntry('Eksekusi Kerja Manual berhasil dijalankan');
+      showToast('Perintah Kerja Sekarang berhasil dieksekusi!', 'emerald');
+    }
+
+    // Pause / Resume Bot State
+    function toggleBotPause() {
+      botState.isPaused = !botState.isPaused;
+      const badgeA = document.getElementById('work-status-badge-a');
+      const badgeB = document.getElementById('work-status-badge-b');
+      const btnA = document.getElementById('btn-pause-a');
+      const btnB = document.getElementById('btn-pause-b');
+      const dotA = document.getElementById('panel-a-status-dot');
+      const dotB = document.getElementById('panel-b-status-dot');
+      const dotPill = document.getElementById('pill-status-dot');
+      const pillBtn = document.getElementById('pill-toggle-btn');
+
+      if (botState.isPaused) {
+        badgeA.textContent = 'Auto Kerja: DIJEDA';
+        badgeA.className = 'px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[12px] font-semibold';
+        badgeB.textContent = 'Auto Kerja: DIJEDA';
+        badgeB.className = 'px-2 py-0.5 rounded-md bg-rose-500/15 border border-rose-400/30 text-rose-300 text-[12px] font-semibold w-fit';
+
+        const resumeHTML = `
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+          </svg>
+          <span>Lanjut</span>
+        `;
+        btnA.innerHTML = resumeHTML;
+        btnA.className = 'btn-cyber py-2 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 font-semibold text-[12px] flex items-center justify-center gap-1.5';
+        btnB.innerHTML = resumeHTML;
+        btnB.className = 'btn-cyber py-2 px-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/40 text-emerald-300 font-semibold text-[12px] flex items-center justify-center gap-1.5';
+
+        dotA.className = 'w-2.5 h-2.5 rounded-full bg-amber-400';
+        dotB.className = 'w-2 h-2 rounded-full bg-amber-400';
+        dotPill.className = 'w-2 h-2 rounded-full bg-amber-400';
+
+        pillBtn.className = 'btn-cyber w-6 h-6 rounded-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-400/30 flex items-center justify-center text-emerald-300';
+        pillBtn.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>`;
+
+        showToast('Auto Worker dijeda sementara', 'amber');
+      } else {
+        badgeA.textContent = 'Auto Kerja: AKTIF';
+        badgeA.className = 'px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold';
+        badgeB.textContent = 'Auto Kerja: AKTIF';
+        badgeB.className = 'px-2 py-0.5 rounded-md bg-emerald-500/15 border border-emerald-400/30 text-emerald-300 text-[12px] font-semibold w-fit';
+
+        const pauseHTML = `
+          <svg class="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="6" y="4" width="4" height="16"></rect>
+            <rect x="14" y="4" width="4" height="16"></rect>
+          </svg>
+          <span>Jeda Bot</span>
+        `;
+        btnA.innerHTML = pauseHTML;
+        btnA.className = 'btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center gap-1.5';
+        btnB.innerHTML = pauseHTML;
+        btnB.className = 'btn-cyber py-2 px-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/40 text-rose-300 font-semibold text-[12px] flex items-center justify-center gap-1.5';
+
+        dotA.className = 'w-2.5 h-2.5 rounded-full bg-emerald-400 status-dot-active';
+        dotB.className = 'w-2 h-2 rounded-full bg-emerald-400 status-dot-active';
+        dotPill.className = 'w-2 h-2 rounded-full bg-emerald-400 status-dot-active';
+
+        pillBtn.className = 'btn-cyber w-6 h-6 rounded-full bg-rose-500/20 hover:bg-rose-500/30 border border-rose-400/30 flex items-center justify-center text-rose-300';
+        pillBtn.innerHTML = `<svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="4" width="4" height="16"></rect><rect x="14" y="4" width="4" height="16"></rect></svg>`;
+
+        showToast('Auto Worker kembali aktif!', 'emerald');
+      }
+    }
+
+    // Toggle Stats Training Active / Off
+    function toggleStatsTraining() {
+      botState.statsTrainingActive = !botState.statsTrainingActive;
+      const badgeA = document.getElementById('stats-toggle-badge-a');
+      const badgeB = document.getElementById('stats-toggle-badge-b');
+      const masterSwitch = document.getElementById('settings-stats-master-switch');
+
+      if (botState.statsTrainingActive) {
+        const html = `<span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span><span>AKTIF</span>`;
+        badgeA.innerHTML = html;
+        badgeA.className = 'btn-cyber px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1';
+        badgeB.innerHTML = html;
+        badgeB.className = 'btn-cyber px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tracking-wide flex items-center gap-1';
+        masterSwitch.className = 'w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0';
+        masterSwitch.innerHTML = '<span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>';
+        showToast('Auto Latihan Stats: AKTIF', 'emerald');
+      } else {
+        const html = `<span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span><span>OFF</span>`;
+        badgeA.innerHTML = html;
+        badgeA.className = 'btn-cyber px-2.5 py-0.5 rounded-full bg-slate-800 border border-white/15 text-slate-400 text-[12px] font-bold tracking-wide flex items-center gap-1';
+        badgeB.innerHTML = html;
+        badgeB.className = 'btn-cyber px-2.5 py-0.5 rounded-full bg-slate-800 border border-white/15 text-slate-400 text-[12px] font-bold tracking-wide flex items-center gap-1';
+        masterSwitch.className = 'w-11 h-6 rounded-full bg-slate-800 border border-white/15 p-0.5 flex items-center justify-start transition-all shrink-0';
+        masterSwitch.innerHTML = '<span class="w-4 h-4 rounded-full bg-slate-400 shadow"></span>';
+        showToast('Auto Latihan Stats: OFF', 'info');
+      }
+    }
+
+    // Update Energy Threshold from Settings Tab 1
+    function updateEnergyThreshold(val) {
+      botState.energyThreshold = Number(val);
+      document.getElementById('energy-threshold-slider').value = val;
+      document.getElementById('slider-energy-readout').textContent = `${val} EN`;
+      document.getElementById('work-threshold-badge-a').textContent = `>= ${val} EN`;
+      document.getElementById('work-threshold-badge-b').textContent = `>= ${val} EN`;
+    }
+
+    // Real-Time Gold Cost Calculator (Tab 2)
+    function computeSeriesCost(currentLv, targetLv) {
+      if (targetLv <= currentLv) return 0;
+      let sum = 0;
+      for (let lv = currentLv; lv < targetLv; lv++) {
+        // Progressive arithmetic series per level
+        sum += Math.round(lv * 0.5);
+      }
+      return sum;
+    }
+
+    function calculateGoldCosts() {
+      const targetStr = Math.max(82, Number(document.getElementById('target-str').value || 82));
+      const targetEdu = Math.max(50, Number(document.getElementById('target-edu').value || 50));
+      const targetEko = Math.max(51, Number(document.getElementById('target-eko').value || 51));
+
+      const costStr = computeSeriesCost(82, targetStr);
+      const costEdu = computeSeriesCost(50, targetEdu);
+      const costEko = computeSeriesCost(51, targetEko);
+      const totalCost = costStr + costEdu + costEko;
+
+      const wallet = Math.max(0, Number(document.getElementById('wallet-gold-input').value || 0));
+      const reserve = Math.max(0, Number(document.getElementById('reserve-gold-input').value || 0));
+      const usable = Math.max(0, wallet - reserve);
+
+      document.getElementById('cost-str-display').textContent = `${costStr.toLocaleString('id-ID')} Emas`;
+      document.getElementById('cost-edu-display').textContent = `${costEdu.toLocaleString('id-ID')} Emas`;
+      document.getElementById('cost-eko-display').textContent = `${costEko.toLocaleString('id-ID')} Emas`;
+      document.getElementById('total-gold-needed').textContent = `${totalCost.toLocaleString('id-ID')} Emas`;
+      document.getElementById('usable-gold-readout').textContent = `${usable.toLocaleString('id-ID')} Emas`;
+
+      const badge = document.getElementById('finance-status-badge');
+      if (usable >= totalCost) {
+        const surplus = usable - totalCost;
+        badge.textContent = `AMAN (+${surplus.toLocaleString('id-ID')} Emas)`;
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-emerald-500/20 border border-emerald-400/40 text-emerald-300 text-[12px] font-bold tabular-nums';
+      } else {
+        const deficit = totalCost - usable;
+        badge.textContent = `Kurang ${deficit.toLocaleString('id-ID')} Emas`;
+        badge.className = 'px-2.5 py-0.5 rounded-full bg-rose-500/20 border border-rose-400/40 text-rose-300 text-[12px] font-bold tabular-nums';
+      }
+    }
+
+    // Settings 5-Tab Switcher
+    function switchSettingsTab(tabIndex) {
+      const labels = ['Kerja', 'Stats & Emas', 'Stealth', 'Suara', 'Pintasan'];
+      for (let i = 1; i <= 5; i++) {
+        const content = document.getElementById(`settings-tab-${i}`);
+        const btn = document.getElementById(`tab-btn-${i}`);
+        if (i === tabIndex) {
+          content.classList.remove('hidden');
+          content.classList.add('flex');
+          btn.className = 'btn-cyber py-2 px-1.5 rounded-xl bg-sky-500/20 border border-sky-400/40 text-sky-300 flex flex-col items-center justify-center gap-1 text-center';
+        } else {
+          content.classList.add('hidden');
+          content.classList.remove('flex');
+          btn.className = 'btn-cyber py-2 px-1.5 rounded-xl bg-transparent hover:bg-white/5 border border-transparent text-slate-400 hover:text-slate-200 flex flex-col items-center justify-center gap-1 text-center';
+        }
+      }
+    }
+
+    // Generic Switch Toggle
+    function toggleSwitch(btn) {
+      const isOn = btn.classList.contains('justify-end');
+      if (isOn) {
+        btn.className = 'w-11 h-6 rounded-full bg-slate-800 border border-white/15 p-0.5 flex items-center justify-start transition-all shrink-0';
+        btn.innerHTML = '<span class="w-4 h-4 rounded-full bg-slate-400 shadow"></span>';
+      } else {
+        btn.className = 'w-11 h-6 rounded-full bg-emerald-500/30 border border-emerald-400/50 p-0.5 flex items-center justify-end transition-all shrink-0';
+        btn.innerHTML = '<span class="w-4 h-4 rounded-full bg-emerald-400 shadow"></span>';
+      }
+    }
+
+    // Toggle Expanded vs Floating Pill Focus
+    function togglePanelMode() {
+      botState.isPillMode = !botState.isPillMode;
+      const expandedWrapper = document.getElementById('panel-a-expanded-wrapper');
+      const pillCapsule = document.getElementById('floating-pill-capsule');
+      const label = document.getElementById('pill-mode-switch-label');
+
+      if (botState.isPillMode) {
+        expandedWrapper.classList.add('opacity-35', 'scale-[0.98]');
+        pillCapsule.classList.add('ring-2', 'ring-sky-400');
+        label.textContent = 'Kembalikan Mode Penuh';
+        showToast('Panel diringkas ke Floating Pill Capsule (36px)', 'sky');
+      } else {
+        expandedWrapper.classList.remove('opacity-35', 'scale-[0.98]');
+        pillCapsule.classList.remove('ring-2', 'ring-sky-400');
+        label.textContent = 'Fokus Kapsul';
+        showToast('Panel diperbesar ke Mode Penuh (Expanded)', 'sky');
+      }
+    }
+
+    function expandFromPill() {
+      if (botState.isPillMode) {
+        togglePanelMode();
+      } else {
+        showToast('Mode Penuh (Expanded) sudah aktif', 'sky');
+      }
+    }
+
+    // Toggle Pin/Lock button
+    function togglePinLock() {
+      botState.isPinned = !botState.isPinned;
+      const btn = document.getElementById('btn-pin-lock');
+      const label = document.getElementById('pin-indicator-label');
+      if (botState.isPinned) {
+        btn.className = 'btn-cyber w-7 h-7 rounded-lg bg-sky-500/20 border border-sky-400/40 flex items-center justify-center text-sky-300';
+        label.textContent = 'Posisi Terkunci (Pinned)';
+        label.className = 'text-[12px] text-sky-400 font-medium';
+        showToast('Posisi Floating Panel dikunci di layar', 'sky');
+      } else {
+        btn.className = 'btn-cyber w-7 h-7 rounded-lg bg-slate-800/80 border border-white/10 flex items-center justify-center text-slate-400';
+        label.textContent = 'Dapat Digeser (Draggable)';
+        label.className = 'text-[12px] text-amber-300 font-medium';
+        showToast('Kunci posisi dibuka — panel dapat digeser', 'amber');
+      }
+    }
+
+    // Toggle Flush State Demo
+    function toggleFlushState() {
+      botState.isFlushNear = !botState.isFlushNear;
+      const b1 = document.getElementById('flush-badge-a');
+      const b2 = document.getElementById('flush-badge-b');
+      if (botState.isFlushNear) {
+        b1.classList.remove('hidden');
+        b2.classList.remove('hidden');
+        showToast('Indikator FLUSH diaktifkan (Mendekati Reset UTC)', 'amber');
+      } else {
+        b1.classList.add('hidden');
+        b2.classList.add('hidden');
+        showToast('Indikator FLUSH disembunyikan', 'info');
+      }
+    }
+
+    // Activity Log Drawer
+    function toggleActivityLog() {
+      const drawer = document.getElementById('log-drawer-a');
+      if (drawer.classList.contains('hidden')) {
+        drawer.classList.remove('hidden');
+        drawer.classList.add('flex');
+      } else {
+        drawer.classList.add('hidden');
+        drawer.classList.remove('flex');
+      }
+    }
+
+    function prependLogEntry(text) {
+      const now = new Date();
+      const time = `${String(now.getUTCHours()).padStart(2, '0')}:${String(now.getUTCMinutes()).padStart(2, '0')}:${String(now.getUTCSeconds()).padStart(2, '0')}`;
+      const container = document.getElementById('log-entries-a');
+      const div = document.createElement('div');
+      div.className = 'text-sky-300';
+      div.textContent = `[${time}] ${text}`;
+      container.prepend(div);
+    }
+
+    // Web Audio API Cyberpunk Chime for [Test Sound]
+    function playCyberTestSound() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        const ctx = new AudioCtx();
+        const vol = Number(document.getElementById('sound-volume-slider').value || 75) / 100;
+
+        const notes = [587.33, 880, 1174.66]; // D5, A5, D6 futuristic triad
+        notes.forEach((freq, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + idx * 0.08);
+
+          gain.gain.setValueAtTime(0.001, ctx.currentTime + idx * 0.08);
+          gain.gain.exponentialRampToValueAtTime(Math.max(0.02, vol * 0.25), ctx.currentTime + idx * 0.08 + 0.02);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + idx * 0.08 + 0.28);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + idx * 0.08);
+          osc.stop(ctx.currentTime + idx * 0.08 + 0.3);
+        });
+
+        showToast('Memutar nada uji audio notifikasi (Web Audio API)', 'sky');
+      } catch (e) {
+        showToast('Audio siap digunakan', 'sky');
+      }
+    }
+
+    // Interactive Hotkey Recorder (Tab 5)
+    function recordHotkey(btn) {
+      const prev = btn.textContent;
+      btn.textContent = 'Tekan Tombol...';
+      btn.classList.add('border-amber-400', 'text-amber-300');
+
+      const handler = (e) => {
+        e.preventDefault();
+        const keyName = e.key === ' ' ? 'Space' : e.key.toUpperCase();
+        if (['ALT', 'CONTROL', 'SHIFT', 'META'].includes(keyName)) return;
+        const prefix = e.altKey ? 'Alt + ' : e.ctrlKey ? 'Ctrl + ' : 'Alt + ';
+        btn.textContent = prefix + keyName.slice(0, 1);
+        btn.classList.remove('border-amber-400', 'text-amber-300');
+        window.removeEventListener('keydown', handler);
+        showToast(`Pintasan keyboard diperbarui ke ${btn.textContent}`, 'emerald');
+      };
+
+      window.addEventListener('keydown', handler, { once: true });
+      setTimeout(() => {
+        if (btn.textContent === 'Tekan Tombol...') {
+          btn.textContent = prev;
+          btn.classList.remove('border-amber-400', 'text-amber-300');
+          window.removeEventListener('keydown', handler);
+        }
+      }, 4000);
+    }
+
+    // Top Navigation Showcase View Filter
+    function setShowcaseView(view) {
+      const secA = document.getElementById('section-surface-a');
+      const secB = document.getElementById('section-surface-b');
+      const secC = document.getElementById('section-surface-c');
+      const grid = document.getElementById('surfaces-grid');
+
+      const navIds = ['all', 'surface-a', 'surface-b', 'surface-c'];
+      navIds.forEach(id => {
+        const b = document.getElementById(`nav-btn-${id}`);
+        if (id === view) {
+          b.className = 'btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-semibold bg-sky-500/20 text-sky-300 border border-sky-400/30 flex items-center gap-1.5';
+        } else {
+          b.className = 'btn-cyber px-3 py-1.5 rounded-lg text-[12px] font-medium text-slate-300 hover:text-white border border-transparent flex items-center gap-1.5';
+        }
+      });
+
+      if (view === 'all') {
+        grid.className = 'grid grid-cols-1 xl:grid-cols-12 gap-6 items-start';
+        secA.className = 'xl:col-span-4 flex flex-col items-center';
+        secB.className = 'xl:col-span-4 flex flex-col items-center';
+        secC.className = 'xl:col-span-4 flex flex-col items-center w-full';
+      } else if (view === 'surface-a') {
+        grid.className = 'flex justify-center py-4';
+        secA.className = 'flex flex-col items-center';
+        secB.className = 'hidden';
+        secC.className = 'hidden';
+      } else if (view === 'surface-b') {
+        grid.className = 'flex justify-center py-4';
+        secA.className = 'hidden';
+        secB.className = 'flex flex-col items-center';
+        secC.className = 'hidden';
+      } else if (view === 'surface-c') {
+        grid.className = 'flex justify-center py-4';
+        secA.className = 'hidden';
+        secB.className = 'hidden';
+        secC.className = 'flex flex-col items-center w-full max-w-[620px]';
+      }
+    }
+
+    function focusSurfaceC() {
+      document.getElementById('section-surface-c').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      showToast('Fokus diarahkan ke Permukaan C: Settings Modal', 'sky');
+    }
+
+    // Initialize Real-Time Gold Calculator on Load
+    window.onload = function () {
+      calculateGoldCosts();
+      updateClocksAndTimers();
+    };
+  </script>
+</body>
+</html>

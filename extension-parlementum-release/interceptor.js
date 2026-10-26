@@ -49,33 +49,83 @@
     }
 
     // ── Deep scanner to locate energy & player data in any JSON payload ──────
-    function scanAndDispatchApiData(url, status, data) {
+    function scanAndDispatchApiData(url, status, data, method = 'GET', reqBody = null) {
         if (!data || typeof data !== 'object') return;
 
         try {
-            // 1. Work endpoint response
-            if (url.includes('/api/player/work') || url.includes('/player/work') || url.includes('/api/work') || url.includes('/api/player/shift') || url.includes('/api/shift')) {
+            const payload = (data.data && typeof data.data === 'object') ? { ...data, ...data.data } : data;
+
+            // Extract stat from request body if available
+            let reqStat = null;
+            if (reqBody) {
+                try {
+                    const parsed = typeof reqBody === 'string' ? JSON.parse(reqBody) : reqBody;
+                    if (parsed && typeof parsed === 'object' && parsed.stat) reqStat = parsed.stat;
+                } catch { /* ignore */ }
+            }
+
+            // 0. Training endpoint response
+            const isTrainUrl = url && (
+                url.includes('/api/player/train') ||
+                url.includes('/player/train') ||
+                url.includes('/api/train')
+            );
+
+            if (isTrainUrl) {
                 if (status >= 200 && status < 300) {
-                    const energyUsed = Number(data.energyUsed) || 0;
+                    sendToExtension('TRAIN_SUCCESS', {
+                        url,
+                        status,
+                        endsAt: payload.endsAt || payload.ends_at || null,
+                        targetLevel: Number(payload.targetLevel ?? payload.target_level ?? 0),
+                        costGold: Number(payload.costGold ?? payload.cost_gold ?? 0),
+                        stat: payload.stat || reqStat || null,
+                        raw: data
+                    });
+                } else {
+                    sendToExtension('TRAIN_REJECTED', {
+                        url,
+                        status,
+                        stat: reqStat || null,
+                        message: payload.message || payload.error || payload.detail || '',
+                        raw: data
+                    });
+                }
+                return;
+            }
+
+            // 1. Work endpoint response
+            const isWorkUrl = url && (
+                url.includes('/api/player/work') ||
+                url.includes('/player/work') ||
+                url.includes('/api/work') ||
+                url.includes('/api/player/shift') ||
+                url.includes('/api/shift') ||
+                /(?:\/api\/.*(?:work|shift))/i.test(url)
+            );
+
+            if (isWorkUrl) {
+                if (status >= 200 && status < 300) {
+                    const energyUsed = Number(payload.energyUsed) || Number(payload.energy_used) || 0;
                     const calculatedXp = energyUsed >= 10 ? Math.floor(energyUsed / 10) * 4 : (energyUsed > 0 ? 4 : 0);
-                    const xpEarned = Number(data.xpEarned) > 0 ? Number(data.xpEarned) : calculatedXp;
+                    const xpEarned = Number(payload.xpEarned) > 0 ? Number(payload.xpEarned) : (Number(payload.xp_earned) > 0 ? Number(payload.xp_earned) : calculatedXp);
                     sendToExtension('WORK_SUCCESS', {
                         url,
                         status,
                         energyUsed,
                         xpEarned,
-                        produced: Number(data.produced) || 0,
-                        workerUnits: Number(data.workerUnits) || 0,
-                        wageNet: data.wageNet || '0',
-                        leveledUp: Boolean(data.leveledUp),
-                        remainingEnergy: data.energy != null ? Number(data.energy) : null,
+                        produced: Number(payload.produced) || 0,
+                        workerUnits: Number(payload.workerUnits) || Number(payload.worker_units) || 0,
+                        wageNet: payload.wageNet || payload.wage_net || '0',
+                        leveledUp: Boolean(payload.leveledUp || payload.leveled_up),
+                        remainingEnergy: payload.energy != null ? Number(payload.energy) : null,
                         raw: data
                     });
                 } else {
                     sendToExtension('WORK_REJECTED', {
                         url,
                         status,
-                        message: data.message || data.error || '',
+                        message: payload.message || payload.error || payload.detail || '',
                         raw: data
                     });
                 }
@@ -148,9 +198,50 @@
                 sendToExtension('FOOD_STATUS', { foodEatenToday: foodEaten });
             }
 
-            const isFoodUrl = /eat|food|roti|bread|item\/use|inventory\/use|consume|use-item|player\/eat|user\/eat|inventory\/consume/i.test(url);
-            if (isFoodUrl && status >= 200 && status < 300) {
-                sendToExtension('FOOD_CONSUMED', { raw: data });
+            // 4. Scanner for player stats (strength, education, economy) & gold
+            const parseGoldVal = (v) => {
+                if (typeof v === 'number' && !isNaN(v) && v >= 0) return Math.round(v);
+                if (typeof v === 'string') {
+                    const clean = v.replace(/[.,]/g, '').replace(/[^\d]/g, '');
+                    const n = parseInt(clean, 10);
+                    if (!isNaN(n) && n >= 0) return n;
+                }
+                return null;
+            };
+
+            let gold = parseGoldVal(data.gold) ?? parseGoldVal(data.walletGold) ?? parseGoldVal(data.wallet_gold);
+            if (gold === null && p && typeof p === 'object') {
+                gold = parseGoldVal(p.gold) ?? parseGoldVal(p.walletGold) ?? parseGoldVal(p.wallet_gold);
+            }
+            if (gold !== null && gold >= 0) {
+                sendToExtension('WALLET_GOLD_SYNC', { gold });
+            }
+
+            let str = null, edu = null, eko = null;
+            if (typeof data.strength === 'number') str = data.strength;
+            if (typeof data.education === 'number') edu = data.education;
+            if (typeof data.economy === 'number') eko = data.economy;
+            if (p && typeof p === 'object') {
+                if (str === null && typeof p.strength === 'number') str = p.strength;
+                if (edu === null && typeof p.education === 'number') edu = p.education;
+                if (eko === null && typeof p.economy === 'number') eko = p.economy;
+            }
+            if (str !== null || edu !== null || eko !== null) {
+                sendToExtension('PLAYER_STATS_SYNC', {
+                    strength: str !== null ? Math.round(str) : null,
+                    education: edu !== null ? Math.round(edu) : null,
+                    economy: eko !== null ? Math.round(eko) : null
+                });
+            }
+
+            // Consuming food is strictly a mutating action (POST/PUT/PATCH).
+            // Never trigger FOOD_CONSUMED on GET requests (which are merely inventory queries)
+            // or on market/trade/shop/craft actions!
+            const isMutation = (method === 'POST' || method === 'PUT' || method === 'PATCH');
+            const isEatActionUrl = /(?:player\/eat|user\/eat|inventory\/use|inventory\/consume|item\/use|item\/consume|action\/eat)\b/i.test(url) &&
+                                   !/(?:market|shop|trade|buy|sell|store|transfer|craft)\b/i.test(url);
+            if (isMutation && isEatActionUrl && status >= 200 && status < 300) {
+                sendToExtension('FOOD_CONSUMED', { raw: data, url });
             }
         } catch { /* ignore */ }
     }
@@ -169,40 +260,34 @@
                 }
             } catch { /* ignore */ }
 
-            let isFoodRequest = false;
-            try {
-                const bodyStr = typeof init?.body === 'string' ? init.body : '';
-                if (/bread|roti|makan|consume/i.test(bodyStr)) isFoodRequest = true;
-            } catch { /* ignore */ }
+            const method = (init?.method || (input && typeof input === 'object' && input.method) || 'GET').toUpperCase();
 
             const response = await originalFetch.apply(this, arguments);
 
             // Clone and inspect API responses safely
             try {
-                const url = typeof input === 'string' ? input : (input && input.url ? input.url : '');
+                const url = typeof input === 'string' ? input : (input && input.url ? input.url : (typeof URL !== 'undefined' && input instanceof URL ? input.href : ''));
                 if (url && (url.includes('/api/') || url.startsWith('/api/'))) {
-                    if (isFoodRequest && response.status >= 200 && response.status < 300) {
-                        sendToExtension('FOOD_CONSUMED', { url });
+                    // Ignore chat, SSE streams, websockets, and telemetry immediately
+                    if (/chat|stream|socket|events|metrics|telemetry|analytics/i.test(url)) {
+                        return response;
+                    }
+                    const contentType = response.headers?.get('content-type') || '';
+                    if (!contentType.includes('application/json')) {
+                        // Never clone streaming or non-JSON payloads
+                        return response;
                     }
                     const clone = response.clone();
-                    const contentType = clone.headers.get('content-type') || '';
-                    if (contentType.includes('application/json')) {
-                        clone.json().then(data => {
-                            scanAndDispatchApiData(url, response.status, data);
-                        }).catch(() => {
-                            clone.text().then(text => {
-                                if (/batas roti harian tercapai/i.test(text)) {
-                                    sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
-                                }
-                            }).catch(() => {});
-                        });
-                    } else {
+                    const reqBody = init?.body || (input && typeof input === 'object' && input.body) || null;
+                    clone.json().then(data => {
+                        scanAndDispatchApiData(url, response.status, data, method, reqBody);
+                    }).catch(() => {
                         clone.text().then(text => {
                             if (/batas roti harian tercapai/i.test(text)) {
                                 sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
                             }
                         }).catch(() => {});
-                    }
+                    });
                 }
             } catch { /* ignore */ }
 
@@ -230,26 +315,27 @@
         };
 
         XMLHttpRequest.prototype.send = function(body) {
-            const isFoodReq = typeof body === 'string' && /bread|roti|makan|consume/i.test(body);
+            const method = (this._aw_method || 'GET').toUpperCase();
+            this._aw_body = body;
+
             this.addEventListener('load', function() {
                 try {
                     const url = this._aw_url || this.responseURL || '';
                     if (url && (url.includes('/api/') || url.startsWith('/api/'))) {
-                        if (isFoodReq && this.status >= 200 && this.status < 300) {
-                            sendToExtension('FOOD_CONSUMED', { url });
+                        if (/chat|stream|socket|events|metrics|telemetry|analytics/i.test(url)) {
+                            return;
                         }
                         const ct = this.getResponseHeader('content-type') || '';
-                        if (ct.includes('application/json') && this.responseText) {
+                        if (!ct.includes('application/json')) return;
+                        if (this.responseText) {
                             try {
                                 const data = JSON.parse(this.responseText);
-                                scanAndDispatchApiData(url, this.status, data);
+                                scanAndDispatchApiData(url, this.status, data, method, this._aw_body);
                             } catch {
                                 if (/batas roti harian tercapai/i.test(this.responseText)) {
                                     sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
                                 }
                             }
-                        } else if (this.responseText && /batas roti harian tercapai/i.test(this.responseText)) {
-                            sendToExtension('FOOD_STATUS', { foodEatenToday: 10 });
                         }
                     }
                 } catch { /* ignore */ }

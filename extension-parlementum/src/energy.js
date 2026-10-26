@@ -1,75 +1,59 @@
+import { gaussianRandom, getHumanJitter, getEnergyJitterOffset, checkMicroBreak } from './humanizer.js';
+import { setValue } from './storage.js';
+import { broadcastTabMessage } from './broadcast.js';
+
 /**
  * Returns true if the current page is the primary game dashboard where
  * live energy cards and active DOM updates reside.
  */
 export function isDashboardPage() {
-    if (typeof window === 'undefined') return false;
-    const path = (window.location.pathname || '').toLowerCase();
-    return path === '/dashboard' || path.startsWith('/dashboard/') || path === '/' || path === '';
+    if (typeof window === 'undefined') return true;
+    const pathname = (window.location.pathname || '').toLowerCase();
+    const cleanPath = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+    return cleanPath === '/dashboard' || cleanPath.startsWith('/dashboard/') || cleanPath === '/' || cleanPath === '';
 }
 
 /** @returns {{ current: number, max: number }|null} */
 export function getCurrentEnergy() {
     try {
-        const isExcluded = el => Boolean(
-            el.closest('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')
-        );
+        if (!isDashboardPage()) return null;
 
-        // ── Priority 1: Top Navigation Bar Spatial Search (Fastest: < 0.2ms) ──
-        // Top header renders the compact pill with [44/110] across all pages
-        const topCandidates = document.querySelectorAll('header, nav, [role="banner"], [class*="nav" i], [class*="header" i], [class*="topbar" i], [class*="navbar" i]');
-        for (const container of topCandidates) {
-            if (isExcluded(container)) continue;
-            const els = container.querySelectorAll('*');
-            const matches = [];
-            for (const el of els) {
-                if (isExcluded(el)) continue;
-                const text = (el.textContent || '').trim();
-                if (!text.includes('/')) continue;
-                if (text.length > 30) continue; // must be a compact pill/label
-                const m = text.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)\b/);
-                if (m) {
-                    const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
-                    if (max >= 50 && max <= 350 && current <= max) {
-                        matches.push({ current, max, len: text.length });
-                    }
+        const isExcluded = el => {
+            if (!el) return true;
+            return Boolean(el.closest('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast'));
+        };
+
+        // ── Priority 0: Fast Target by TestID ─────────────────────────────────────
+        const testIdCards = document.querySelectorAll('[data-testid="dash-energy"], [data-testid="energy"], [data-testid*="energy" i]');
+        for (const card of testIdCards) {
+            if (isExcluded(card)) continue;
+            const text = (card.textContent || '').trim();
+            const m = text.match(/(?:^|[^\d])(\d{1,3})\s*\/\s*(\d{2,3})(?:[^\d]|$)/);
+            if (m) {
+                const cur = parseInt(m[1], 10);
+                const mx = parseInt(m[2], 10);
+                if (mx >= 50 && mx <= 350 && cur <= mx) {
+                    return { current: cur, max: mx };
                 }
-            }
-            if (matches.length > 0) {
-                matches.sort((a, b) => a.len - b.len);
-                return { current: matches[0].current, max: matches[0].max };
             }
         }
 
-        // ── Priority 2: Dedicated Dashboard "ENERGI" Card ─────────────────────
-        // On parlamentum.org/dashboard, the main energy card has a heading with "ENERGI"
-        const energyHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
-        for (const h of energyHeaders) {
-            if (isExcluded(h)) continue;
-            const t = (h.textContent || '').trim();
-            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 30) {
-                // Search in parent card (up to 4 levels up)
-                let card = h.parentElement;
-                for (let level = 0; level < 4 && card && card !== document.body; level++) {
-                    const innerEls = card.querySelectorAll('*');
-                    for (const el of innerEls) {
-                        if (isExcluded(el)) continue;
-                        const txt = (el.textContent || '').trim();
-                        if (!txt.includes('/') || txt.length > 25) continue;
-                        const m = txt.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)/);
-                        if (m) {
-                            const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
-                            if (max >= 50 && max <= 350 && current <= max) {
-                                return { current, max };
-                            }
-                        }
-                    }
+        // ── Priority 1: Unique "Penuh dalam" or "ISI" Card Signature ─────────────
+        // On Parlementum dashboard, the energy card ALWAYS contains the unique text "Penuh dalam"
+        const fullLabels = document.querySelectorAll('span, div, p');
+        for (const el of fullLabels) {
+            if (isExcluded(el)) continue;
+            const txt = (el.textContent || '').trim();
+            if (/^Penuh\s+dalam\b/i.test(txt) || /^(?:ISI|ISI\s*[-·])\s*\d+/i.test(txt)) {
+                let card = el.parentElement;
+                for (let lvl = 0; lvl < 4 && card && card !== document.body; lvl++) {
                     const cardText = (card.textContent || '').trim();
-                    const m = cardText.match(/(\d+)\s*\/\s*(\d+)/);
+                    const m = cardText.match(/(?:(?:ENERGI|ENERGY)[\s\S]{0,30}?)?(\d{1,3})\s*\/\s*(\d{2,3})\b/i);
                     if (m) {
-                        const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
-                        if (max >= 50 && max <= 350 && current <= max) {
-                            return { current, max };
+                        const cur = parseInt(m[1], 10);
+                        const mx = parseInt(m[2], 10);
+                        if (mx >= 50 && mx <= 350 && cur <= mx) {
+                            return { current: cur, max: mx };
                         }
                     }
                     card = card.parentElement;
@@ -77,42 +61,80 @@ export function getCurrentEnergy() {
             }
         }
 
-        // ── Priority 3: Innermost Elements in Document with \d+/\d+ ──────────
-        const allCandidates = document.querySelectorAll('div, span, p, a, button, [role="status"]');
-        const matches = [];
-        for (const el of allCandidates) {
-            if (isExcluded(el)) continue;
-            const text = (el.textContent || '').trim();
-            if (!text.includes('/')) continue;
-            if (text.length > 35) continue;
-            const m = text.match(/(?:\u26A1|\b)(\d+)\s*\/\s*(\d+)\b/);
-            if (m) {
-                const current = parseInt(m[1], 10), max = parseInt(m[2], 10);
-                if (max >= 50 && max <= 350 && current <= max) {
-                    const hasIcon = text.includes('\u26A1') || Boolean(el.querySelector('svg'));
-                    matches.push({ current, max, len: text.length, hasIcon });
+        // ── Priority 2: Dedicated Dashboard "ENERGI" Card Header ─────────────────
+        const energyHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
+        for (const h of energyHeaders) {
+            if (isExcluded(h)) continue;
+            const t = (h.textContent || '').trim();
+            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)$/i.test(t) || (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 20)) {
+                let card = h.parentElement;
+                for (let level = 0; level < 4 && card && card !== document.body; level++) {
+                    if (card.getAttribute('data-testid') === 'dash-deck' || card.getAttribute('data-testid') === 'dash-col-you' || card.tagName === 'MAIN') {
+                        break;
+                    }
+                    const cardText = (card.textContent || card.innerText || '').trim();
+                    const m = cardText.match(/(?:(?:ENERGI|ENERGY)[\s\S]{0,40}?)?(\d{1,3})\s*\/\s*(\d{2,3})\b/i);
+                    if (m) {
+                        const current = parseInt(m[1], 10);
+                        const max = parseInt(m[2], 10);
+                        if (max >= 50 && max <= 350 && current <= max) {
+                            return { current, max };
+                        }
+                    }
+
+                    const children = card.querySelectorAll('span, div, p');
+                    for (const child of children) {
+                        if (isExcluded(child)) continue;
+                        const childTxt = (child.textContent || '').trim();
+                        if (!childTxt.includes('/') || childTxt.length > 20) continue;
+                        if (/\b(?:LEVEL|XP|ROTI|SLOT|EMAS|USD|LV)\b/i.test(childTxt)) continue;
+                        const cm = childTxt.match(/(\d{1,3})\s*\/\s*(\d{2,3})\b/);
+                        if (cm) {
+                            const cur = parseInt(cm[1], 10);
+                            const mx = parseInt(cm[2], 10);
+                            if (mx >= 50 && mx <= 350 && cur <= mx) {
+                                return { current: cur, max: mx };
+                            }
+                        }
+                    }
+                    card = card.parentElement;
                 }
             }
         }
 
-        if (matches.length > 0) {
-            matches.sort((a, b) => (b.hasIcon ? 1 : 0) - (a.hasIcon ? 1 : 0) || a.len - b.len);
-            return { current: matches[0].current, max: matches[0].max };
-        }
-
-        // ── Priority 4: Split React Spans (<span current> / <span max>) ──────
-        const slashEls = document.querySelectorAll('span, div');
-        for (const el of slashEls) {
-            if (isExcluded(el)) continue;
-            if ((el.textContent || '').trim() === '/') {
-                const prev = el.previousElementSibling;
-                const next = el.nextElementSibling;
-                if (prev && next) {
-                    const current = parseInt((prev.textContent || '').trim(), 10);
-                    const max = parseInt((next.textContent || '').trim(), 10);
-                    if (Number.isSafeInteger(current) && Number.isSafeInteger(max) && max >= 50 && max <= 350 && current <= max) {
+        // ── Priority 3: Bottom Floating Status Bar or Top Nav [\u26A1 75/215] ─────────
+        const statusCandidates = document.querySelectorAll('header, nav, footer, [role="banner"], [role="status"], div[class*="nav" i], div[class*="bar" i], div[class*="bottom" i], div[class*="fixed" i], div[class*="sticky" i]');
+        for (const container of statusCandidates) {
+            if (isExcluded(container)) continue;
+            const els = container.querySelectorAll('span, div, p, a, button');
+            for (const el of els) {
+                if (isExcluded(el)) continue;
+                const txt = (el.textContent || '').trim();
+                if (!txt.includes('/') || txt.length > 25) continue;
+                if (/\b(?:LEVEL|XP|MAKANAN|ROTI|SLOT|DOMPET|EMAS|USD|LATIHAN|KEKUATAN|PENDIDIKAN)\b/i.test(txt)) continue;
+                const m = txt.match(/(?:\u26A1|\b)(\d{1,3})\s*\/\s*(\d{2,3})\b/);
+                if (m) {
+                    const current = parseInt(m[1], 10);
+                    const max = parseInt(m[2], 10);
+                    if (max >= 50 && max <= 350 && current <= max) {
                         return { current, max };
                     }
+                }
+            }
+        }
+
+        // ── Priority 4: Work Button Energy [KERJAKAN SATU GILIRAN \u26A1 86] ───────
+        const workBtn = document.querySelector('button[data-testid="work"]') ||
+            Array.from(document.querySelectorAll('button')).find(b =>
+                !isExcluded(b) && /KERJAKAN\s+SATU\s+GILIRAN/i.test(b.textContent || '')
+            );
+        if (workBtn) {
+            const btnText = (workBtn.textContent || '').trim();
+            const btnMatch = btnText.match(/(?:\u26A1)\s*(\d{1,3})\b/);
+            if (btnMatch) {
+                const cur = parseInt(btnMatch[1], 10);
+                if (cur >= 0 && cur <= 350) {
+                    return { current: cur, max: 215 };
                 }
             }
         }
@@ -128,27 +150,48 @@ export function getCurrentEnergy() {
  */
 export function waitForEnergyElement(maxWaitMs = 15000) {
     return new Promise(resolve => {
+        if (!isDashboardPage()) {
+            return resolve(null);
+        }
         const immediate = getCurrentEnergy();
         if (immediate) return resolve(immediate);
 
         const deadline = Date.now() + maxWaitMs;
-        const observer = new MutationObserver(() => {
-            const result = getCurrentEnergy();
-            if (result) {
-                observer.disconnect();
-                resolve(result);
-            } else if (Date.now() >= deadline) {
-                observer.disconnect();
-                resolve(null);
-            }
-        });
-        observer.observe(document.documentElement, { childList: true, subtree: true });
+        let done = false;
 
-        // Safety timeout in case MutationObserver doesn't fire
-        setTimeout(() => {
-            observer.disconnect();
-            resolve(getCurrentEnergy());
-        }, maxWaitMs);
+        const finish = (result) => {
+            if (done) return;
+            done = true;
+            try { observer.disconnect(); } catch { /* ignore */ }
+            if (pollTimer) clearInterval(pollTimer);
+            resolve(result || getCurrentEnergy());
+        };
+
+        let rafPending = false;
+        const observer = new MutationObserver(() => {
+            if (rafPending) return;
+            rafPending = true;
+            requestAnimationFrame(() => {
+                rafPending = false;
+                const result = getCurrentEnergy();
+                if (result) finish(result);
+                else if (Date.now() >= deadline) finish(null);
+            });
+        });
+
+        try {
+            observer.observe(document.documentElement, { childList: true, subtree: true });
+        } catch { /* ignore */ }
+
+        // Fast poll safety timer (every 50ms for first 1.5s, then 200ms)
+        const startTime = Date.now();
+        const pollTimer = setInterval(() => {
+            const res = getCurrentEnergy();
+            if (res) finish(res);
+            else if (Date.now() >= deadline) finish(null);
+        }, Date.now() - startTime < 1500 ? 50 : 200);
+
+        setTimeout(() => finish(null), maxWaitMs);
     });
 }
 
@@ -161,73 +204,117 @@ export function updatePageEnergyDOM(current, max) {
 }
 
 /**
- * Returns energy using active Dashboard page DOM when visible,
- * or time-based estimation when on static non-dashboard tabs (e.g. /pasar) or background tabs.
+ * Pure mathematical projection of energy from a fixed anchor point.
+ * Preserves fractional elapsed milliseconds so that zero seconds are lost across ticks.
+ *
+ * @param {object} syncBase { current, max, updatedAt, regenRate }
+ * @param {number} [now=Date.now()]
+ * @returns {number} Integer energy clamped between 0 and max
+ */
+export function calculateProjectedEnergy(syncBase, now = Date.now()) {
+    if (!syncBase || typeof syncBase.current !== 'number') return 0;
+    const max = syncBase.max || 115;
+    if (syncBase.current >= max) return max;
+    const updatedAt = syncBase.updatedAt || now;
+    const elapsedMs = Math.max(0, now - updatedAt);
+    const rate = Math.max(0.5, syncBase.regenRate || 1.0);
+    // Parlamentum formula: `rate` energy per minute (60,000 ms)
+    const gained = Math.floor((elapsedMs * rate) / 60000);
+    return Math.min(max, syncBase.current + gained);
+}
+
+export const SCRIPT_LOAD_TIME = Date.now();
+
+/**
+ * Multi-layer hybrid energy calculation: Ground-truth DOM when fresh,
+ * or mathematical projection from energySyncBase anchor when hidden or on unrefreshed post-shift DOM.
  * @param {object} state
  */
 export function getSyncedEnergy(state) {
-    const isHidden = typeof document !== 'undefined' && document.hidden;
-    const now      = Date.now();
-    const isDash   = isDashboardPage();
+    const now    = Date.now();
+    const isDash = isDashboardPage();
 
-    // 1. Static Non-Dashboard Page (e.g. /pasar, /pasar-global) OR Hidden/Background Tab:
-    // The DOM on non-dashboard pages is a static snapshot from initial page load and does not auto-regenerate.
-    // Use O(1) mathematical calculation based on energySyncBase so energy keeps ticking up smoothly!
-    if ((isHidden || !isDash) && state.energySyncBase && typeof state.energySyncBase.current === 'number') {
-        const syncBase = state.energySyncBase;
-        const max = syncBase.max || state.maxEnergy || 115;
-        const elapsedMins = syncBase.updatedAt ? (now - syncBase.updatedAt) / 60000 : 0;
-        const regenRate = state.regenRate || 1.0;
-        const gained = Math.floor(elapsedMins * regenRate);
-        const calculated = Math.min(max, syncBase.current + Math.max(0, gained));
+    // 1. Dashboard DOM check when on /dashboard
+    if (isDash) {
+        const pageEnergy = getCurrentEnergy();
+        if (pageEnergy) {
+            const rate = state.regenRate || getRegionHealthBonus() || 1.0;
+            state.regenRate = rate;
 
-        // On non-dashboard pages, if the static DOM navbar was somehow higher (e.g. user ate bread on another tab and refreshed /pasar):
-        if (!isDash) {
-            const pageEnergy = getCurrentEnergy();
-            if (pageEnergy && pageEnergy.current > calculated) {
-                state.energySyncBase = { current: pageEnergy.current, max: pageEnergy.max, updatedAt: now };
+            const isTabHidden = typeof document !== 'undefined' && document.hidden;
+            const isRecentShift = Boolean(state.lastWorkTimestamp && (now - state.lastWorkTimestamp < 10000));
+
+            // DOM is ONLY stale if the tab is hidden in the background with un-rendered old energy,
+            // OR if a shift was executed in this tab in the last 10 seconds and React hasn't updated yet.
+            // When the user has the tab open in foreground, the visible DOM is 100% authoritative!
+            const isDomClearlyStale = Boolean(
+                (isTabHidden && state.domEnergyStale && pageEnergy.current > (state.postShiftEnergy ?? 0) + 2) ||
+                (isRecentShift && state.postShiftEnergy != null && pageEnergy.current > state.postShiftEnergy + 2)
+            );
+
+            if (!isDomClearlyStale) {
+                // DOM is genuine ground-truth
+                state.hasInitialDomEnergyRead = true;
                 state.currentEnergy = pageEnergy.current;
                 state.maxEnergy = pageEnergy.max;
+                state.domEnergyStale = false;
+                state.shiftExecutedInSession = false;
+
+                // Ground the mathematical sync anchor whenever genuine DOM energy is read
+                if (!state.energySyncBase || state.energySyncBase.current !== pageEnergy.current || Math.abs(calculateProjectedEnergy(state.energySyncBase, now) - pageEnergy.current) >= 1) {
+                    state.energySyncBase = {
+                        current: pageEnergy.current,
+                        max: pageEnergy.max,
+                        updatedAt: now,
+                        regenRate: rate
+                    };
+                }
                 return pageEnergy;
             }
         }
-
-        return { current: calculated, max };
     }
 
-    const pageEnergy = getCurrentEnergy();
-
-    // 2. Visible Dashboard DOM is ALWAYS ground truth when on /dashboard!
-    if (pageEnergy && !isHidden && isDash) {
-        state.domEnergyStale = false;
-        state.currentEnergy = pageEnergy.current;
-        state.maxEnergy = pageEnergy.max;
-        state.energySyncBase = { current: pageEnergy.current, max: pageEnergy.max, updatedAt: now };
-        return pageEnergy;
+    // 2. Mathematical Projection from energySyncBase (zero-drift fixed anchor)
+    // Used when DOM is stale, on non-dashboard tabs (/map, /pasar), or during initial hydration
+    if (!state.energySyncBase || typeof state.energySyncBase.current !== 'number') {
+        state.energySyncBase = {
+            current: state.currentEnergy || 0,
+            max: state.maxEnergy || 115,
+            updatedAt: now,
+            regenRate: state.regenRate || getRegionHealthBonus() || 1.0
+        };
     }
+    const regenRate = state.regenRate || getRegionHealthBonus() || 1.0;
+    state.regenRate = regenRate;
+    state.energySyncBase.regenRate = regenRate;
 
-    // 3. Fallback to energySyncBase
-    const syncBase = state.energySyncBase;
-    if (syncBase && typeof syncBase.current === 'number') {
-        const max = syncBase.max || state.maxEnergy || 115;
-        const elapsedMins = syncBase.updatedAt ? (now - syncBase.updatedAt) / 60000 : 0;
-        const regenRate = state.regenRate || getRegionHealthBonus() || 1.0;
-        const gained = Math.floor(elapsedMins * regenRate);
-        const calculated = Math.min(max, syncBase.current + Math.max(0, gained));
-        return { current: calculated, max };
+    const max = state.energySyncBase.max || state.maxEnergy || 115;
+    const calculated = calculateProjectedEnergy(state.energySyncBase, now);
+    if (calculated > 0 || state.hasInitialDomEnergyRead || state.postShiftEnergy === 0) {
+        state.currentEnergy = calculated;
     }
-
-    if (pageEnergy) {
-        return pageEnergy;
-    }
-
-    return { current: state.currentEnergy || 0, max: state.maxEnergy || 115 };
+    state.maxEnergy = max;
+    return { current: state.currentEnergy, max };
 }
 
 /** Checks if current local time is within configured sleep hours */
 export function isSleepTime(CONFIG) {
     if (!CONFIG?.sleepScheduleEnabled) return false;
     const now = new Date();
+    if (CONFIG.sleepStartTime && CONFIG.sleepEndTime) {
+        const [sh, sm] = CONFIG.sleepStartTime.split(':').map(Number);
+        const [eh, em] = CONFIG.sleepEndTime.split(':').map(Number);
+        if (!isNaN(sh) && !isNaN(eh)) {
+            const currentMins = now.getHours() * 60 + now.getMinutes();
+            const startMins = sh * 60 + (sm || 0);
+            const endMins = eh * 60 + (em || 0);
+            if (startMins < endMins) {
+                return currentMins >= startMins && currentMins < endMins;
+            } else {
+                return currentMins >= startMins || currentMins < endMins;
+            }
+        }
+    }
     const currentHour = now.getHours();
     const start = CONFIG.sleepStartHour ?? 1;
     const end = CONFIG.sleepEndHour ?? 6;
@@ -284,12 +371,23 @@ export function getGameEnergyFullText() {
     return null;
 }
 
+export function invalidateRegionCache() {
+    _lastRegionScanTime = 0;
+    _cachedRegionDetails = null;
+}
+
+if (typeof window !== 'undefined') {
+    window.addEventListener('popstate', () => { _lastRegionScanTime = 0; });
+}
+
 export function getRegionDetails(force = false) {
     if (typeof document === 'undefined') {
         return { name: 'Wilayah', level: 0, bonusPercent: 0, bonusMultiplier: 1.0 };
     }
     const now = Date.now();
-    if (!force && _cachedRegionDetails && (now - _lastRegionScanTime < 10000)) {
+    // Cache region details for 5 minutes (300,000ms) unless explicitly forced or on route change.
+    // In Parlamentum, player region and health bonus never change during normal gameplay without traveling.
+    if (!force && _cachedRegionDetails && (now - _lastRegionScanTime < 300000 || !isDashboardPage())) {
         return _cachedRegionDetails;
     }
     let name = '';
@@ -299,9 +397,15 @@ export function getRegionDetails(force = false) {
     let bodyText = '';
 
     try {
-        // Collect text from document.body AND any active or mounted tooltips
+        // Collect text from targeted region/header containers first to avoid triggering full-body DOM reflow
         const textParts = [];
-        if (document.body) textParts.push(document.body.innerText || '');
+        const topContainer = document.querySelector('header, nav, [class*="topbar" i], [class*="region" i], [data-testid="region-index-health"]')?.closest('div, section') || null;
+        if (topContainer) {
+            textParts.push(topContainer.innerText || topContainer.textContent || '');
+        } else if (document.body) {
+            textParts.push(document.body.innerText || '');
+        }
+
         const tooltips = document.querySelectorAll('[role="tooltip"], [data-radix-popper-content-wrapper], [class*="tooltip" i], [class*="popover" i]');
         for (const tip of tooltips) {
             textParts.push(tip.innerText || tip.textContent || '');
@@ -475,9 +579,23 @@ export function isEnergyFlushActive(CONFIG) {
 /** @param {object} state @param {object} CONFIG @returns {number} */
 export function getEffectiveEnergyThreshold(state, CONFIG) {
     if (isEnergyFlushActive(CONFIG)) {
-        return 10;
+        // If server recently rejected with "not enough energy to produce even one unit",
+        // temporarily suspend flush and respect the user's normal threshold
+        if (state?.energyFlushLockoutUntil && Date.now() < state.energyFlushLockoutUntil) {
+            return CONFIG?.energyThreshold || 20;
+        }
+        // If the workplace unit production requires more than 10 EN (e.g. 20 EN for 8 XP),
+        // use that requirement so we never send invalid requests
+        const minCost = state?.unitEnergyCost || 10;
+        return Math.min(CONFIG?.energyThreshold || minCost, minCost);
     }
-    return CONFIG?.energyThreshold || 10;
+    const base = CONFIG?.energyThreshold || 10;
+    if (CONFIG?.energyThresholdJitterEnabled && !isEnergyFlushActive(CONFIG)) {
+        const offset = getEnergyJitterOffset(CONFIG);
+        const maxEn = state?.maxEnergy || 115;
+        return Math.max(10, Math.min(maxEn, base + offset));
+    }
+    return base;
 }
 
 /** @param {object} state @param {object} CONFIG @returns {number} milliseconds to wait */
@@ -490,16 +608,16 @@ export function getNextWorkDelay(state, CONFIG) {
     let threshold = getEffectiveEnergyThreshold(state, CONFIG);
 
     if (!isFlush && CONFIG.stealthJitterEnabled) {
-        // Humanizer: variasi acak -1 s/d +2 energi
-        const variance = Math.floor(Math.random() * 4) - 1;
+        // Humanizer: variasi Gaussian (0 s/d +2 energi, tidak pernah kurang dari threshold user)
+        const variance = Math.max(0, Math.round(gaussianRandom(0.4, 0.8, 0, 2)));
         threshold = Math.min(100, Math.max(10, threshold + variance));
     }
 
     if (state.currentEnergy >= threshold) {
-        // Dynamic Timing Jitter: jeda acak 5 - 25 detik agar timing kerja natural
+        // Dynamic Humanizer Timing Jitter: kurva reaksi normal Gaussian
         if (CONFIG.stealthJitterEnabled) {
             const maxJitter = (CONFIG.stealthJitterMaxSeconds || 25) * 1000;
-            return Math.floor(Math.random() * (maxJitter - 4000)) + 4000;
+            return getHumanJitter(4000, maxJitter, 7000 + (maxJitter - 4000) * 0.28);
         }
         return 3000;
     }
@@ -508,33 +626,85 @@ export function getNextWorkDelay(state, CONFIG) {
     const regenRate = state.regenRate || getRegionHealthBonus() || 1.0;
     state.regenRate = regenRate;
     const msNeeded = (energyNeeded / regenRate) * 60000;
-    const jitter = Math.floor(Math.random() * 7000) + 3000;
+    const jitter = getHumanJitter(2500, 8500, 4800);
     return Math.round(msNeeded + jitter);
 }
 
 /** @param {object} state @param {object} CONFIG @returns {string} */
 export function getLiveCountdown(state, CONFIG) {
     if (isSleepTime(CONFIG)) return 'Tidur';
+
+    // Check Micro-Breaks
+    const brk = checkMicroBreak(state, CONFIG);
+    if (brk.inBreak) {
+        const m = Math.ceil(brk.remainingMs / 60000);
+        return `Istirahat ${m}m`;
+    }
+
+    // Check Network Backoff
+    if (state.backoffUntil && Date.now() < state.backoffUntil) {
+        const total = Math.ceil((state.backoffUntil - Date.now()) / 1000);
+        return `Retry ${total}s`;
+    }
+
+    if (isDashboardPage() && !state.hasInitialDomEnergyRead && (!state.currentEnergy || state.currentEnergy <= 0)) {
+        return 'Sinkronisasi...';
+    }
     const isFlush = isEnergyFlushActive(CONFIG);
     const threshold = getEffectiveEnergyThreshold(state, CONFIG);
     const curEnergy = state.currentEnergy ?? 0;
-    if (curEnergy >= threshold) return isFlush ? 'Flush!' : 'Now!';
-    let remaining = (state.nextWorkTimestamp || 0) - Date.now();
-    if (!state.nextWorkTimestamp && curEnergy < threshold) {
-        const regenRate = state.regenRate || 1.0;
-        remaining = Math.max(1, (threshold - curEnergy) / regenRate) * 60000;
+    const regenRate = Math.max(0.5, state.regenRate || 1.0);
+
+    // 1. Check if server cooldown or rejection penalty is active
+    if (state.serverCooldownUntil && Date.now() < state.serverCooldownUntil) {
+        const remaining = state.serverCooldownUntil - Date.now();
+        const total = Math.ceil(remaining / 1000);
+        return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
     }
-    if (remaining <= 0) return isFlush ? 'Flush...' : 'Menunggu energi...';
-    const total = Math.ceil(remaining / 1000);
+
+    // 2. Ready to work
+    if (curEnergy >= threshold) {
+        if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
+            const jitterSec = Math.ceil((state.nextWorkTimestamp - Date.now()) / 1000);
+            if (jitterSec > 0 && jitterSec <= 35) {
+                return `${jitterSec}s`;
+            }
+        }
+        return isFlush ? 'Flush!' : 'Siap';
+    }
+
+    // 3. Below threshold: accurately compute time needed based on regeneration rate
+    const energyNeeded = Math.max(1, threshold - curEnergy);
+    let remainingMs = Math.round((energyNeeded / regenRate) * 60000);
+
+    // If a future schedule is set and roughly aligns with energy regeneration, synchronize with it
+    if (state.nextWorkTimestamp && state.nextWorkTimestamp > Date.now()) {
+        const schedMs = state.nextWorkTimestamp - Date.now();
+        if (schedMs >= remainingMs - 120000) {
+            remainingMs = schedMs;
+        }
+    }
+
+    if (remainingMs <= 0) return isFlush ? 'Flush...' : 'Menunggu energi...';
+    const total = Math.ceil(remainingMs / 1000);
     return `${Math.floor(total / 60)}m ${String(total % 60).padStart(2, '0')}s`;
 }
 
 /** @param {object} state @returns {string} */
 export function getTimeToFullEnergy(state) {
+    if (isDashboardPage() && !state.hasInitialDomEnergyRead && (!state.currentEnergy || state.currentEnergy <= 0)) {
+        return 'Sinkronisasi...';
+    }
     const maxE = Math.max(50, state.maxEnergy || 115);
     const curE = Math.max(0, state.currentEnergy ?? 0);
     const needed = Math.max(0, maxE - curE);
     if (needed <= 0) return 'Penuh!';
+
+    // Priority 1: Use authoritative game DOM text if available (matches game 100%)
+    const gameFull = getGameEnergyFullText();
+    if (gameFull) {
+        return gameFull.replace(/\s+/g, ' ').trim();
+    }
 
     const regenRate = Math.max(0.5, state.regenRate || 1.0);
     const exactMinutes = Math.max(1, Math.round(needed / regenRate));
@@ -544,10 +714,10 @@ export function getTimeToFullEnergy(state) {
     }
     const h = Math.max(0, Math.floor(exactMinutes / 60));
     const m = Math.max(0, exactMinutes % 60);
-    if (m === 0) return `~${h} j`;
-    if (h < 24) return `~${h} j ${m} mnt`;
+    if (m === 0) return `~${h}j`;
+    if (h < 24) return `~${h}j ${m}m`;
     const d = Math.floor(h / 24);
-    return `~${d} hari ${h % 24} j`;
+    return `~${d}h ${h % 24}j`;
 }
 
 let _playerLevelLastScan = 0;
@@ -572,165 +742,120 @@ export function getMaxEnergyForLevel(level) {
     return Math.min(300, 100 + 5 * (level - 1));
 }
 
-let _lastPatchedCurrent = null;
-let _lastPatchedMax = null;
-let _lastPatchTime = 0;
-
 /**
- * Safely updates the visual energy indicators on the host page (top navigation pill,
- * dashboard "ENERGI" card, progress bar, and "KERJAKAN SATU GILIRAN" button state).
- * 
- * Modifies text values via existing text nodes (node.nodeValue) and element styles
- * without destroying or replacing React DOM elements.
+ * Intentionally a complete safe NO-OP:
+ * Never mutate or tamper with the host page React DOM text nodes or progress bars.
+ * Doing so wipes React virtual DOM bindings, creates visual glitches, and confuses
+ * the extension's ground-truth DOM scrapers.
  * 
  * @param {number} current
  * @param {number} [max]
  * @param {boolean} [force=false]
  */
 export function patchPageVisualEnergy(current, max, force = false) {
-    if (typeof document === 'undefined') return;
-    try {
-        const safeCurrent = Math.max(0, Math.round(current));
-        const safeMax = (typeof max === 'number' && max > 0) ? Math.round(max) : 115;
-        const now = Date.now();
-
-        // Throttle redundant calls if energy hasn't changed within 1000ms
-        if (!force && safeCurrent === _lastPatchedCurrent && safeMax === _lastPatchedMax && (now - _lastPatchTime < 1000)) {
-            return;
-        }
-        _lastPatchedCurrent = safeCurrent;
-        _lastPatchedMax = safeMax;
-        _lastPatchTime = now;
-
-        const pct = Math.min(100, Math.max(0, (safeCurrent / safeMax) * 100)).toFixed(1);
-
-        const FORBIDDEN_WORDS = /(?:SKOR\s+KOTA|KAPASITAS\s+WILAYAH|PETA\s+LANGSUNG|INFRASTRUKTUR)/i;
-
-        const isExcluded = el => {
-            if (!el) return true;
-            if (el.closest('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast')) return true;
-            const container = el.closest('div, section, article');
-            if (container) {
-                const text = container.textContent || '';
-                if (FORBIDDEN_WORDS.test(text) && !/^\s*(?:\u26A1)?\s*ENERGI\b/i.test(text)) {
-                    return true;
-                }
-            }
-            return false;
-        };
-
-        function patchTextInElement(el) {
-            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-            let node;
-            let patched = false;
-            while ((node = walker.nextNode())) {
-                const val = node.nodeValue || '';
-                if (val.includes('/') && /\d+\s*\/\s*\d+/.test(val)) {
-                    node.nodeValue = val.replace(/(\d+)(\s*\/\s*)(\d+)/, (match, p1, p2, p3) => {
-                        const mMax = parseInt(p3, 10);
-                        if (mMax >= 50 && mMax <= 350) {
-                            patched = true;
-                            return `${safeCurrent}${p2}${safeMax || mMax}`;
-                        }
-                        return match;
-                    });
-                }
-            }
-            if (!patched) {
-                const text = (el.textContent || '').trim();
-                const m = text.match(/^(\d+)(\s*\/\s*)(\d+)$/);
-                if (m) {
-                    const mMax = parseInt(m[3], 10);
-                    if (mMax >= 50 && mMax <= 350) {
-                        const walker2 = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
-                        let firstTextNode = walker2.nextNode();
-                        if (firstTextNode && /^\d+$/.test(firstTextNode.nodeValue?.trim() || '')) {
-                            firstTextNode.nodeValue = String(safeCurrent);
-                        }
-                    }
-                }
-            }
-        }
-
-        // 1. Dashboard "ENERGI" card ONLY
-        const energyHeaders = document.querySelectorAll('h1, h2, h3, h4, h5, h6, span, div, p');
-        for (const h of energyHeaders) {
-            if (isExcluded(h)) continue;
-            const t = (h.textContent || '').trim();
-            if (/^(?:\u26A1)?\s*(?:ENERGI|ENERGY)\b/i.test(t) && t.length <= 15) {
-                let card = h.parentElement;
-                let depth = 0;
-                while (card && card !== document.body && depth < 5) {
-                    const cardText = (card.textContent || '').trim();
-                    if (FORBIDDEN_WORDS.test(cardText)) break;
-
-                    if (cardText.includes('/') && /\d+\s*\/\s*\d+/.test(cardText)) {
-                        // Patch text nodes in card
-                        const innerEls = card.querySelectorAll('*');
-                        for (const el of innerEls) {
-                            if (isExcluded(el)) continue;
-                            const txt = (el.textContent || '').trim();
-                            if (txt.includes('/') && txt.length <= 25 && /\d+\s*\/\s*\d+/.test(txt)) {
-                                patchTextInElement(el);
-                            }
-                        }
-
-                        // Patch progress bar width in this container or any child/sibling
-                        const bars = card.querySelectorAll('[role="progressbar"], div[style*="width"], span[style*="width"], [class*="bg-cyan" i], [class*="bg-teal" i], [class*="bg-emerald" i]');
-                        for (const bar of bars) {
-                            if (isExcluded(bar)) continue;
-                            bar.style.width = `${pct}%`;
-                            if (bar.hasAttribute('aria-valuenow')) bar.setAttribute('aria-valuenow', String(safeCurrent));
-                            if (bar.hasAttribute('aria-valuemax')) bar.setAttribute('aria-valuemax', String(safeMax));
-                        }
-
-                        if (bars.length > 0) break;
-                    }
-                    card = card.parentElement;
-                    depth++;
-                }
-            }
-        }
-
-        // 2. Navigation bar energy pills (Top header and bottom bar)
-        const navCandidates = document.querySelectorAll('header, nav, footer, [role="banner"], [class*="nav" i], [class*="header" i], [class*="topbar" i], [class*="navbar" i], [class*="bottom" i]');
-        for (const container of navCandidates) {
-            if (isExcluded(container)) continue;
-            const els = container.querySelectorAll('*');
-            for (const el of els) {
-                if (isExcluded(el)) continue;
-                const txt = (el.textContent || '').trim();
-                if (txt.includes('/') && txt.length <= 30 && /\d+\s*\/\s*\d+/.test(txt)) {
-                    patchTextInElement(el);
-                }
-            }
-        }
-
-        // 3. Work button visual state
-        const buttons = document.querySelectorAll('button');
-        for (const btn of buttons) {
-            if (isExcluded(btn)) continue;
-            const btnText = (btn.textContent || '').trim();
-            if (/KERJAKAN\s+SATU\s+GILIRAN/i.test(btnText)) {
-                // Update energy number inside button if present
-                const walker = document.createTreeWalker(btn, NodeFilter.SHOW_TEXT);
-                let node;
-                while ((node = walker.nextNode())) {
-                    const val = node.nodeValue || '';
-                    if (/(?:\u26A1)?\s*\d+/.test(val)) {
-                        node.nodeValue = val.replace(/((?:\u26A1)?\s*)(\d+)/, `$1${safeCurrent}`);
-                    }
-                }
-                if (safeCurrent < 10) {
-                    btn.style.opacity = '0.55';
-                    btn.style.filter = 'grayscale(0.6)';
-                    btn.title = `Energi saat ini ${safeCurrent}/${safeMax} EN (butuh minimal 10 EN untuk giliran kerja)`;
-                } else {
-                    btn.style.opacity = '1';
-                    btn.style.filter = 'none';
-                    btn.title = '';
-                }
-            }
-        }
-    } catch { /* ignore */ }
+    return false;
 }
+
+let _lastLoggedFoodCap = null;
+let _lastLoggedEatenCount = null;
+
+/**
+ * Reads the official bread / rations quota directly from the game's dashboard DOM.
+ * Element: <span data-testid="bread-today">Sisa roti hari ini 9/20</span>
+ *
+ * Accurately extracts:
+ * - maxFoodDaily (10 for standard, 20 for premium)
+ * - foodEatenToday (maxFoodDaily - remaining)
+ *
+ * @param {object} state
+ * @param {object} CONFIG
+ * @param {Function} [log]
+ * @returns {{ remaining: number, maxCap: number, eaten: number, changed: boolean }|null}
+ */
+export function readBreadQuotaFromDom(state, CONFIG, log = null) {
+    if (typeof document === 'undefined') return null;
+    if (!isDashboardPage()) return null;
+
+    const isExcluded = el => Boolean(el?.closest?.('#aw-panel, #aw-settings-modal, #aw-analytics-modal, #aw-log-modal, #aw-notification-toast'));
+
+    try {
+        // Priority 1: Official data-testid="bread-today"
+        let el = document.querySelector('[data-testid="bread-today"]');
+        if (el && isExcluded(el)) el = null;
+
+        // Priority 2: Inside [data-testid="rations"]
+        if (!el) {
+            const rations = document.querySelector('[data-testid="rations"]');
+            if (rations && !isExcluded(rations)) {
+                el = rations.querySelector('[data-testid="bread-today"]') ||
+                     rations.querySelector('span.tabular-nums');
+            }
+        }
+
+        // Priority 3: Fuzzy text search for "sisa roti"
+        if (!el) {
+            const spans = document.querySelectorAll('span, p, div');
+            for (const s of spans) {
+                if (isExcluded(s)) continue;
+                const txt = (s.textContent || '').trim();
+                if (/sisa\s*roti/i.test(txt) && /\d+\s*\/\s*\d+/.test(txt)) {
+                    el = s;
+                    break;
+                }
+            }
+        }
+
+        if (!el) return null;
+
+        const text = (el.textContent || '').trim();
+        const match = text.match(/(\d{1,2})\s*\/\s*(\d{1,2})/);
+        if (!match) return null;
+
+        const remaining = parseInt(match[1], 10);
+        const maxCap = parseInt(match[2], 10);
+
+        if (isNaN(remaining) || isNaN(maxCap) || maxCap < 5 || maxCap > 50) return null;
+
+        const eaten = Math.max(0, Math.min(maxCap, maxCap - remaining));
+        let changed = false;
+
+        // 1. Synchronize maxFoodDaily (Standard 10 vs Premium 20)
+        if (CONFIG && (CONFIG.maxFoodDaily !== maxCap || state.maxFoodDaily !== maxCap)) {
+            const prevCap = CONFIG.maxFoodDaily;
+            CONFIG.maxFoodDaily = maxCap;
+            state.maxFoodDaily = maxCap;
+            setValue('aw_maxFoodDaily', maxCap.toString());
+            setValue('maxFoodDaily', maxCap);
+            if (log && _lastLoggedFoodCap !== maxCap && prevCap && prevCap !== maxCap) {
+                _lastLoggedFoodCap = maxCap;
+                log(`[Auto Roti] Kuota roti otomatis terdeteksi dari game: ${maxCap} slot (${maxCap === 20 ? 'Akun Premium' : 'Akun Standar'}).`, 'info');
+            }
+            changed = true;
+        }
+
+        // 2. Synchronize foodEatenToday
+        if (state.foodEatenToday !== eaten) {
+            const prevEaten = state.foodEatenToday;
+            state.foodEatenToday = eaten;
+            setValue('aw_foodEatenToday', eaten.toString());
+            broadcastTabMessage({
+                type: 'FOOD_UPDATED',
+                foodEatenToday: eaten,
+                maxFoodDaily: maxCap,
+                timestamp: Date.now()
+            });
+            if (log && prevEaten !== undefined && eaten > prevEaten && _lastLoggedEatenCount !== eaten) {
+                _lastLoggedEatenCount = eaten;
+                log(`Makan roti terdeteksi (+${eaten - prevEaten}): ${eaten}/${maxCap} slot (${remaining} sisa).`, 'info');
+            }
+            changed = true;
+        }
+
+        return { remaining, maxCap, eaten, changed };
+    } catch {
+        return null;
+    }
+}
+
+
+

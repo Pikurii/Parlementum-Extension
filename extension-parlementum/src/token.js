@@ -76,13 +76,18 @@ export function handleNewToken(state, logFn, wakePendingWork, rawCandidate, sour
         ? `${expiry.toLocaleTimeString('id-ID')} (${Math.floor(diff / 3600)}h ${Math.floor((diff % 3600) / 60)}m)`
         : 'Tidak ada exp';
 
-    logFn(`Token valid via ${source}! Exp: ${timeStr}`, 'success');
+    logFn(`Token valid via ${source}! Exp: ${timeStr}`, 'success', false);
 
     state.tokenExpired     = false;
+    try {
+        sessionStorage.removeItem('aw_token_reload_attempts');
+        sessionStorage.removeItem('aw_auth_reload_attempts');
+    } catch { /* ignore */ }
 
-    if (state.pausedForToken || !state.running) {
+    if (state.pausedForToken) {
         state.running = true;
         state.pausedForToken = false;
+        try { setValue('aw_worker_running', 'true'); } catch { /* ignore */ }
         logFn('Sesi diperbarui. Script dilanjutkan otomatis.', 'success');
         onResume?.();
         wakePendingWork?.();
