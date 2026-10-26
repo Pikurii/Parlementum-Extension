@@ -3,6 +3,12 @@
   "name": "Parlamentum Auto Worker",
   "version": "5.12.2",
   "description": "Smart auto worker, analytics, and efficiency dashboard for Parlamentum.org",
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "parlementum-auto-worker@pikurii",
+      "strict_min_version": "115.0"
+    }
+  },
   "permissions": [
     "storage",
     "notifications",
